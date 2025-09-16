@@ -1,0 +1,1257 @@
+---
+title: "script_ghg_grazing_goesele"
+output: html_document
+date: "2025-09-16"
+---
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(data.table)
+library(ggplot2)
+library(Metrics)
+library(ggpubr)
+library(plotrix)
+library(jpeg)
+library(PMCMRplus)
+library(afex)
+library(emmeans)
+library(quantreg)
+library(gridExtra)
+library(rpart)
+library(rpart.plot)
+library(stringr)
+library(vegan)
+library(visreg)
+library(ggeffects)
+library(Hmisc)
+library(smplot2)
+library(broom)
+library(ggpmisc)
+library(indicspecies)
+library(tidyr)
+library(tidyverse)
+library(ggpubr) 
+library(DHARMa)
+library(ggeffects)
+library(ggplot2)
+library(glmmTMB)
+library(ggpubr)
+```
+
+
+# LOAD DATA
+```{r LOAD DATA, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+library(here)
+
+file<-here("data_processed_L2", "2025-04-01_data_grazing_L2.csv")
+data_grazing <- read.csv(file, dec = ",", sep = ",")
+
+today_date <- Sys.Date()
+
+data_grazing <- data_grazing[ , -1]
+
+
+```
+
+## Data Wragling
+```{r Data Wragling, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+# reduce _grazing dataset to ch4 measuements
+data_grazing <- data_grazing %>% filter(ghg == "ch4")
+
+# reduce _grazing dataset to grazed/Ungrazed sites 
+library(dplyr)
+library(tidyverse)
+data_grazing <- data_grazing %>%
+  subset(site %in% c("NES", "MET", "SCH", "HEI"))
+
+data_grazing$site <-factor(data_grazing$site, 
+                       levels=c("NES", "MET","HEI","SCH"))
+
+# add plot site names 
+data_grazing <- data_grazing %>%
+  mutate(site_plot = recode_factor(site,
+                   "NES" = "N1",
+                   "MET" = "N2",
+                   "HEI" = "B1",
+                   "SCH" = "B2")) 
+
+# set coast factor levels
+data_grazing$coast <-factor(data_grazing$coast, 
+                       levels=c("North Sea","Baltic Sea"))
+
+# set transect.point levels
+levels(data_grazing$transect.point)
+data_grazing <- data_grazing %>%
+  subset(transect.point %in% c("1", "2", "3", "4", "5"))
+
+#rename not grazed to ungrazed
+data_grazing <- data_grazing %>%
+  mutate(treatment = ifelse(treatment == "Not grazed", "Ungrazed", treatment))
+
+# create ID for each ghg / iris measurement
+data_grazing$ID <- paste(data_grazing$coast, data_grazing$site, data_grazing$treatment, data_grazing$transect.point, sep = "_")
+data_grazing<- data_grazing%>%
+  select(ID, everything())
+
+# create one month & season column
+data_grazing <- data_grazing %>%
+  mutate(month_name = ifelse(
+    !is.na(month_name.ghg) & !is.na(month_name.iris) & month_name.ghg == month_name.iris, 
+    month_name.ghg, 
+    coalesce(month_name.ghg, month_name.iris)))%>%
+  mutate(season = ifelse(
+    !is.na(season.ghg) & !is.na(season.iris) & season.ghg == season.iris, 
+    season.ghg, 
+    coalesce(season.ghg, season.iris))) %>%
+  select(-month_name.ghg, -month_name.iris, -season.ghg, -season.iris)
+
+data_grazing <- data_grazing %>%
+  select(ID, site, treatment, transect.point, date.ghg, time, datetime, fDOY, month.ghg, month_name,season,campaign,
+  everything())
+
+# format date and time cols
+data_grazing$datetime <- as.POSIXct(data_grazing$datetime, format = "%Y-%m-%d %H:%M:%S")
+data_grazing$date.ghg <- as.Date(data_grazing$date.ghg, origin = "1970-01-01", tz = "Europe/Berlin")
+data_grazing$date.insertion <- as.Date(data_grazing$date.insertion, origin = "1970-01-01", tz = "Europe/Berlin")
+data_grazing$date.retrieval <- as.Date(data_grazing$date.retrieval, origin = "1970-01-01", tz = "Europe/Berlin")
+
+library(chron)
+data_grazing$time <- chron(times = data_grazing$time)
+
+# add time of day depending on highest sun, and day of year depending on longest day (21.Juni, 172)
+library(lubridate)
+data_grazing <- data_grazing %>%
+  mutate(
+    hour = hour(datetime),
+    minute = minute(datetime),
+    time_of_day = (hour + minute / 60) - 12,  # Umrechnung in Stundenabstand zu 12:00 Uhr
+    doy = yday(datetime),  # Berechnet den Tag des Jahres (DOY)
+    day_of_year = doy - 172  # 21. Juni = 0, Tage davor negativ, danach positiv 
+
+  )
+
+
+# set other factor levels
+data_grazing$season <- factor(data_grazing$season, 
+                       levels=c("Winter","Spring","Summer", "Autumn"))
+
+data_grazing$month_name <-factor(data_grazing$month_name, 
+                       levels=c("January", "February", "March","April", "May","June",
+                                "July","August","September","October","November","December"))
+
+data_grazing$campaign <-factor(data_grazing$campaign, 
+                       levels=c("zero","one", "two", "three","four", "five","six",
+                                "seven"))
+
+
+# update plant parameters
+data_grazing <- data_grazing %>%
+  select(-Atriplex.laciniata) %>%
+  mutate(Juncus.gerardii_Festuca.rubra = Juncus.gerardii+Festuca.rubra)%>% 
+  select(-Festuca.rubra)%>%
+    select(-Juncus.gerardii)
+
+
+# corrected the redox potential of the standard hydrogen electrode by +207 mV (Mansfeldt 2003)
+data_grazing<- data_grazing %>%
+  mutate(across(c(bbm_kg_m2_mean,  abm_kg_m2_mean, redox, mean.vwc, salinity, mean.tairC, mean.tsoil, mean.rh, mean.rad, rmse.ch4_ppb,r2.ch4), as.numeric))
+
+data_grazing$redox<-data_grazing$redox+207
+
+#add root zone for IRIS
+data_grazing<- data_grazing %>%
+ mutate(
+    across(c(sr_0.10.cm, sr_10.20.cm), as.numeric),
+    sr_root = rowMeans(across(c(sr_0.10.cm, sr_10.20.cm)), na.rm = TRUE),
+    sr_root = ifelse(is.nan(sr_root), NA, sr_root))
+
+#add root zone for c_oc
+data_grazing<- data_grazing %>%
+  mutate(
+    across(c(c_oc_1, c_oc_2), as.numeric),
+    oc_root = rowMeans(cbind(c_oc_1, c_oc_2), na.rm = TRUE),
+    oc_root = ifelse(is.nan(oc_root), NA, oc_root))
+
+#add root zone for density
+data_grazing<- data_grazing %>%
+  mutate(
+    across(c(dry_bulk_density_g_cm3_1, dry_bulk_density_g_cm3_2), as.numeric),
+    density_root = rowMeans(cbind(dry_bulk_density_g_cm3_1, dry_bulk_density_g_cm3_2), na.rm = TRUE),
+    density_root = ifelse(is.nan(density_root), NA, density_root))
+
+
+#create ID column
+data_grazing$id <- paste( data_grazing$site, data_grazing$treatment, data_grazing$transect.point, sep = "_")
+data_grazing<- data_grazing%>%
+  select(id, everything())
+
+data_grazing$id <- as.factor(data_grazing$id)
+
+
+# clean tdr (vwc) data
+data_grazing$mean.vwc[data_grazing$mean.vwc > 96] <- NA
+
+
+# shift methane flux to positive only fluxes by adding a constant of 10
+data_grazing <- data_grazing %>%
+  mutate(flux.ch4.mg.d = as.numeric(flux.ch4.mg.d))%>%
+  mutate(pos.flux.ch4.mg.d = flux.ch4.mg.d+10) #10, sonst Verteilung anders
+
+# log transform methane flux
+data_grazing <- data_grazing %>%
+  mutate(log.pos.flux.ch4.mg.d = log(pos.flux.ch4.mg.d)) %>%
+  mutate(log.pos.flux.ch4.mg.d = ifelse(is.nan(log.pos.flux.ch4.mg.d), NA, log.pos.flux.ch4.mg.d))
+
+
+```
+
+### Add Indicator species for flux categories
+```{r}
+library(vegan)
+library(indicspecies)
+library(tidyverse)
+#create species matrix
+species_matrix_id <- data_grazing %>%
+  group_by(id) %>%
+  summarise(across(c(Argentina.anserina:Tripolium.pannonicum, Juncus.gerardii_Festuca.rubra),
+                   ~ first(.x, na.rm = TRUE)), 
+            .groups = "drop")
+
+#create mean flux categories per plot
+flux_categories_id <- data_grazing %>%
+  group_by(id) %>%
+  summarise(flux.ch4.mg.d = mean(flux.ch4.mg.d, na.rm = TRUE), .groups = "drop") %>%
+  mutate(flux.ch4_categories = case_when(
+    flux.ch4.mg.d < mean(flux.ch4.mg.d, na.rm = TRUE) ~ "low",
+    flux.ch4.mg.d >= mean(flux.ch4.mg.d, na.rm = TRUE) ~ "high"
+  ))
+
+#merge dfs
+indval_data <- left_join(species_matrix_id, flux_categories_id, by = "id")
+
+species_matrix_final <- indval_data %>% select(c(Argentina.anserina:Tripolium.pannonicum,Juncus.gerardii_Festuca.rubra))
+group_vector <- indval_data$flux.ch4_categories
+
+indval.ch4 <- multipatt(species_matrix_final, group_vector)
+summary(indval.ch4, alpha = 1)
+
+```
+
+
+## Data Inspection
+```{r}
+#shapiro.test, nahe 1 Normalverteilt
+shapiro.test(data_grazing$flux.ch4.mg.d)
+hist(data_grazing$flux.ch4.mg.d)
+sum(!is.na(data_grazing$pos.flux.ch4.mg.d))
+sum(!is.na(data_grazing$log.pos.flux.ch4.mg.d))
+hist(data_grazing$log.pos.flux.ch4.mg.d)
+hist(data_grazing$flux.ch4.mg.d)
+
+# hist flux per treatment
+hist(data_grazing[data_grazing$treatment=="Ungrazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$treatment=="Grazed",]$log.pos.flux.ch4.mg.d)
+
+# hist flux per site and treatment
+hist(data_grazing[data_grazing$site=="NES"&data_grazing$treatment=="Ungrazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="NES"&data_grazing$treatment=="Grazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="MET"&data_grazing$treatment=="Ungrazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="MET"&data_grazing$treatment=="Grazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="SCH"&data_grazing$treatment=="Ungrazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="SCH"&data_grazing$treatment=="Grazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="HEI"&data_grazing$treatment=="Ungrazed",]$log.pos.flux.ch4.mg.d)
+hist(data_grazing[data_grazing$site=="HEI"&data_grazing$treatment=="Grazed",]$log.pos.flux.ch4.mg.d)
+
+
+# repetative variables
+hist(data_grazing$redox)
+hist(data_grazing$sr_root)
+hist(data_grazing$mean.vwc)
+hist(data_grazing$salinity)
+hist(data_grazing$mean.tairC)
+hist(data_grazing$mean.tsoil)
+hist(data_grazing$mean.rh)
+hist(data_grazing$mean.rad)
+
+# variables measured once
+data_grazing_once <- data_grazing %>%
+  group_by(id,site,treatment) %>%
+  summarise(across(c(bbm_kg_m2_mean, oc_root, density_root, abm_kg_m2_mean), ~ first(.x), .names = "{.col}"),
+            .groups = "drop")
+
+hist(data_grazing_once$bbm_kg_m2_mean)
+hist(data_grazing_once$oc_root)
+hist(data_grazing_once$density_root)
+hist(data_grazing_once$abm_kg_m2_mean)
+
+
+
+
+```
+
+#VIZUALISATION
+##Bar charts
+### Main effects
+```{r}
+#methane flux 
+data_grazing_ch4.treatment <- data_grazing %>% 
+  group_by(treatment) %>%
+  dplyr::summarise(across (flux.ch4.mg.d, # use not pos.log variable for vizualisation‚
+                           na.rm = TRUE, 
+                           .f = list(mean = mean, se = std.error)))
+
+ggplot(data_grazing_ch4.treatment, aes(x = treatment, y = flux.ch4.mg.d_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = flux.ch4.mg.d_mean + flux.ch4.mg.d_se, ymin = flux.ch4.mg.d_mean - flux.ch4.mg.d_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  ylab(expression('CH'[4]*' flux [mg CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(#axis.text.y = element_text(size = 15),
+        #axis.text.x = element_text(size = 15),
+        #axis.title.y = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1))+ 
+    theme(aspect.ratio = 1/0.99) 
+
+
+
+#density_root 
+data_grazing_density_treatment <- data_grazing %>%
+  group_by(id, treatment) %>%
+  summarise(density_root = first(density_root), .groups = "drop") %>%
+  group_by(treatment) %>%
+  summarise(density_root_mean = mean(density_root, na.rm = TRUE), 
+            density_root_se = std.error(density_root, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(data_grazing_density_treatment, aes(x = treatment, y = density_root_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = density_root_mean + density_root_se, ymin = density_root_mean - density_root_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+ylab(expression(atop("Soil bulk density (0-20 cm)", paste("[g cm"^-3, "]"))))+
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(#axis.text.y = element_text(size = 15),
+        #axis.text.x = element_text(size = 15),
+        #axis.title.y = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1))+ 
+    theme(aspect.ratio = 1/0.99) 
+
+
+```
+
+###Site effects
+```{r}
+# belowground biomass
+data_grazing_bbm_kg_m2_mean_site_treatment <- data_grazing %>% 
+  group_by(id, site_plot, treatment) %>%   
+  summarise(bbm_kg_m2_mean = first(bbm_kg_m2_mean, na.rm = TRUE), .groups = "drop") %>%
+  group_by(site_plot, treatment) %>%
+  summarise(bbm_kg_m2_mean_mean = mean(bbm_kg_m2_mean, na.rm = TRUE), 
+            bbm_kg_m2_mean_se = std.error(bbm_kg_m2_mean, na.rm = TRUE),
+            .groups = "drop")
+
+
+ggplot(data_grazing_bbm_kg_m2_mean_site_treatment, aes(x = treatment, y = bbm_kg_m2_mean_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = bbm_kg_m2_mean_mean + bbm_kg_m2_mean_se, ymin = bbm_kg_m2_mean_mean - bbm_kg_m2_mean_se),
+                width = 0.2, position = position_dodge(0.5)) +
+  facet_wrap(nrow=1,vars(site_plot )) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+#ylab(expression(atop("Belowground biomass", paste("[kg m"^-2, "]"))))+
+  ylab(expression("Belowground biomass [kg m"^-2,"]"))+
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(#axis.text.x = element_blank(),
+        #axis.text.y = element_text(size = 17),
+         #axis.title.y = element_text(size = 17),
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"),
+         strip.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+       aspect.ratio = 1/0.7) 
+
+
+
+# soil organic carbon
+data_grazing_oc_root_site_treatment <- data_grazing %>% 
+  group_by(id, site_plot, treatment) %>%   
+  summarise(oc_root = first(oc_root, na.rm = TRUE), .groups = "drop") %>%
+  group_by(site_plot, treatment) %>%
+  summarise(oc_root_mean = mean(oc_root, na.rm = TRUE), 
+            oc_root_se = std.error(oc_root, na.rm = TRUE),
+            .groups = "drop")
+
+
+ggplot(data_grazing_oc_root_site_treatment, aes(x = treatment, y = oc_root_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = oc_root_mean + oc_root_se, ymin = oc_root_mean - oc_root_se),
+                width = 0.2, position = position_dodge(0.5)) +
+  facet_wrap(nrow=1,vars(site_plot )) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+ ylab("Soil organic carbon [%]")+
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(axis.text.x = element_text(size = 14),
+        #axis.text.y = element_text(size = 10),
+         #axis.title.y = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"),
+         strip.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+       aspect.ratio = 1/0.7) 
+
+
+```
+
+#### Season
+```{r}
+# methane flux
+data_grazing_ch4.month_name <- data_grazing %>% 
+  group_by(treatment,site_plot, coast, month_name) %>%
+  dplyr::summarise(across (flux.ch4.mg.d, # use not pos.log variable for vizualisation‚
+                           na.rm = TRUE, 
+                           .f = list(mean = mean, se = std.error)))
+
+# Plot
+ggplot(data_grazing_ch4.month_name, 
+       aes(x = month_name, y = flux.ch4.mg.d_mean, 
+           fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', position = position_dodge(width = 1), 
+           size = 1, alpha = 0.5) +
+  geom_errorbar(aes(
+    ymin = flux.ch4.mg.d_mean - flux.ch4.mg.d_se,
+    ymax = flux.ch4.mg.d_mean + flux.ch4.mg.d_se
+  ),
+  width = 0.5,
+  position = position_dodge(width = 1)) +
+  facet_wrap(nrow = 1, vars(site_plot)) +
+  scale_color_manual(name = "", values = c("Grazed" = "#BDDB37", "Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "", values = c("Grazed" = "#BDDB37", "Ungrazed" = "darkgreen")) +
+  ylab(expression('CH'[4]*' flux [mg CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(
+    aspect.ratio = 1/0.7,
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),#
+    #axis.text.y = element_text(size = 16),
+    #axis.title.y = element_text(size = 15),
+    #strip.text = element_text(size = 14),
+    legend.position = c(0.08, 0.83),  # Legende innerhalb des Plots (oben links)
+    legend.background = element_rect(fill = "white", color = "white"),
+    legend.key = element_rect(fill = "white"),
+    panel.spacing = unit(1, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1.5))
+```
+
+
+## Supplement
+### Bar charts
+```{r}
+# Soil bulk density
+data_grazing_density_root_site_treatment <- data_grazing %>% 
+  group_by(site_plot, treatment) %>%
+  summarise(density_root_mean = mean(density_root, na.rm = TRUE), 
+            density_root_se = std.error(density_root, na.rm = TRUE),
+            .groups = "drop")
+
+ggplot(data_grazing_density_root_site_treatment, aes(x = treatment, y = density_root_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = density_root_mean + density_root_se, ymin = density_root_mean - density_root_se),
+                width = 0.2, position = position_dodge(0.5)) +
+  facet_wrap(nrow=1,vars(site_plot )) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+ ylab(expression(atop("Soil bulk density", paste("[g cm"^-3, "] (0-20cm)"))))+
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(axis.text.x = element_blank(),
+        #axis.text.y = element_text(size = 10),
+        # axis.title.y = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"),
+        #strip.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+       aspect.ratio = 1/0.7) 
+
+
+# Volumentic water content
+data_grazing_mean.vwc_site_treatment <- data_grazing %>% 
+  group_by( site_plot, treatment) %>%
+  dplyr::summarise(across (mean.vwc, # use not pos.log variable for vizualisation‚
+                           na.rm = TRUE, 
+                           .f = list(mean = mean, se = std.error)))
+
+
+ggplot(data_grazing_mean.vwc_site_treatment, aes(x = treatment, y = mean.vwc_mean, fill = treatment, color = treatment)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymax = mean.vwc_mean + mean.vwc_se, ymin = mean.vwc_mean - mean.vwc_se),
+                width = 0.2, position = position_dodge(0.5)) +
+  facet_wrap(nrow=1,vars(site_plot )) +
+  scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+ ylab(expression(atop("Volumetric water content", paste("[g cm"^-3, "] (0-10cm)"))))+
+  xlab("") +
+  theme_pubr(base_size = 18) +
+  theme(#axis.text.x = element_blank(),
+        #axis.text.y = element_text(size = 10),
+        # axis.title.y = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(2, "lines"),
+        strip.text = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+       aspect.ratio = 1/0.7) 
+
+
+
+
+
+#stacked bar plot
+# pivot longer 
+data_veg <- data_grazing%>%
+  pivot_longer(
+    c(
+   "Argentina.anserina",
+  "Artemisia.maritima",
+  "Atriplex.portulacoides",
+  "Atriplex.prostrata",
+  "Elymus.athericus",
+  "Glaux.maritima"  ,
+  "Juncus.gerardii_Festuca.rubra",
+  "Juncus.maritimus",
+   "Limonium.vulgare",
+  "Phragmites.australis",
+  "Plantago.maritima",
+  "Puccinellia.maritima",
+  "Salicornia.europea",
+  "Spartina.anglica",
+  "Spergularia.media",
+  "Suaeda.maritima",
+  "Tripolium.pannonicum"),
+names_to="species",
+values_to="cover"
+  )  %>%
+  mutate(species = str_replace_all(species, "\\.", " "))
+
+#used:
+data_veg<-data_veg%>%
+  group_by(coast,site_plot, treatment, transect.point) %>%
+  mutate(cover = ifelse(cover > 0, (cover / sum(cover) * 100) / 5, 0))
+
+ggplot(data_veg, aes(fill = species, y = cover, x = treatment)) + 
+    geom_bar(position = "stack", stat = "identity") +
+  scale_color_manual(name = "",
+                     values = c(
+"Argentina anserina" = "#1b7837",
+"Artemisia maritima" = "#762a83",
+"Atriplex portulacoides" = "#4d9221",
+"Atriplex prostrata" = "#8c510a",
+"Carex distans" = "#d6604d",
+"Elymus athericus" = "#00441b",
+"Glaux maritima"= "#40004b",
+"Juncus gerardii_Festuca rubra" = "#a50026",
+"Juncus maritimus" = "purple",
+"Limonium vulgare" = "#BDDB37",
+"Plantago maritima" = "#3383FF",
+"Phragmites australis" = "purple",
+"Puccinellia maritima" = "#313695",
+"Salicornia europea" = "#a50026",
+"Spartina anglica" = "#67001f",
+"Spergularia media" = "#e6f5d0",
+"Suaeda maritima" = "#053061",
+"Tripolium pannonicum" = "purple")) +
+  scale_fill_manual(name = "",
+                     values = c(
+"Argentina anserina" = "#1b7837",
+"Artemisia maritima" = "#762a83",
+"Atriplex portulacoides" = "#4d9221",
+"Atriplex prostrata" = "#8c510a",
+"Carex distans" = "#d6604d",
+"Elymus athericus" = "#00441b",
+"Glaux maritima"= "#40004b",
+"Juncus gerardii_Festuca rubra" = "#a50026",
+"Juncus maritimus" = "purple",
+"Limonium vulgare" = "#BDDB37",
+"Plantago maritima" = "#3383FF",
+"Phragmites australis" = "purple",
+"Puccinellia maritima" = "#313695",
+"Salicornia europea" = "#a50026",
+"Spartina anglica" = "#67001f",
+"Spergularia media" = "#e6f5d0",
+"Suaeda maritima" = "#053061",
+"Tripolium pannonicum" = "purple"))+
+  theme_pubr(base_size = 18) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+    axis.text.y = element_text(size = 14),
+    legend.position = c(0.95, 0.9),  # Legende innerhalb des Plots (oben rechts)
+    legend.background = element_rect(fill = "white", color = "white"),
+        legend.text = element_text(face = "italic"),  # makes legend labels italic
+    legend.key = element_rect(fill = "white"),
+    panel.spacing = unit(1, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1),
+  )+
+    labs(y = "Cover (%)", x = "")+ 
+  facet_wrap(nrow = 1, vars(site_plot))+
+  theme(legend.position = "top",
+        legend.text = element_text(size = 15),
+        axis.text.y = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        strip.text = element_text(size = 14))
+
+
+data_grazing_salinity.month_name <- data_grazing %>% 
+  group_by( coast, month_name) %>%
+  dplyr::summarise(across (salinity, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error))) 
+
+ggplot(data_grazing_salinity.month_name, 
+       aes(x = month_name, y = salinity_mean, color = coast, group = coast)) +
+  geom_point(aes(fill = coast), size = 3, position = position_dodge(width = 0.5)) +
+  geom_line(size = 0.5) +
+  geom_errorbar(aes(ymin = salinity_mean - salinity_se, 
+                    ymax = salinity_mean + salinity_se), 
+                width = 0.2, size = 0.5, 
+                position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "",
+                     values = c("North Sea" = "darkblue","Baltic Sea" = "lightblue")) +
+  scale_fill_manual(name = "",
+                    values = c("North Sea" = "darkblue","Baltic Sea" = "lightblue")) +
+  ylab("Sea water salinity [ppt]") +
+  xlab("") +
+  theme_pubr() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),
+    axis.text.y = element_text(size = 14),
+    legend.position = c(0.85, 0.85),
+    legend.background = element_rect(fill = "white", color = "white"),
+    legend.key = element_rect(fill = "white"),
+    panel.spacing = unit(1, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, size = 1)
+  )
+
+
+
+```
+
+### Scatter plots
+```{r}
+# redox/ch4
+lm.redox.flux.ch4.mg.d <- data_grazing %>% 
+  group_by( treatment, id) %>%
+  dplyr::summarise(across (c(log.pos.flux.ch4.mg.d, redox), # use log.pos. methane flux
+                           na.rm = TRUE, 
+                           .f = list(mean= mean, max = max, min = min, se=std.error))) 
+
+ggplot(lm.redox.flux.ch4.mg.d, aes(y =log.pos.flux.ch4.mg.d_mean , x = redox_mean)) +
+  geom_point(aes(color=treatment, fill=treatment),size = 3, stroke = 1) + 
+ geom_smooth(method ="lm",se=TRUE,alpha = 0.2, size = 0.5) +  
+  ylab(expression('log CH'[4]*' flux [mg CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("Redox potential [mV]") +
+  theme_pubr(base_size = 18) +
+     scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+   scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+         axis.title.y = element_text(size = 15),
+         axis.title.x = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5))+
+      theme(aspect.ratio = 1/0.7)
+
+
+
+#bbm/oc
+lm.oc_root.bbm <- data_grazing %>%
+  group_by(treatment, id) %>%
+  summarise(bbm_kg_m2_mean = first(bbm_kg_m2_mean),
+    oc_root        = first(oc_root),
+    .groups = "drop")
+
+ggplot(lm.oc_root.bbm, aes(y = oc_root, x = bbm_kg_m2_mean)) +
+  geom_point(aes(color=treatment, fill=treatment),size = 3, stroke = 1) + 
+ geom_smooth(method ="lm",se=TRUE,alpha = 0.2, size = 0.5) +  
+  xlab(expression('Belowground biomass [kg m'^-2*']')) +
+  ylab('Soil organic carbon [%]') +
+   scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+   scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  theme_pubr(base_size = 18) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+         axis.title.y = element_text(size = 15),
+         axis.title.x = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5))+
+      theme(aspect.ratio = 1/0.7)
+
+
+#redox/oc
+lm.oc_root.redox <- data_grazing %>%
+  group_by(treatment, id) %>%
+  summarise(redox = first(redox),
+    oc_root        = first(oc_root),
+    .groups = "drop")
+
+
+ggplot(lm.oc_root.redox, aes(x =oc_root , y = redox)) +
+  geom_point(aes(color=treatment, fill=treatment),size = 3, stroke = 1) + 
+ geom_smooth(method ="lm",se=TRUE,alpha = 0.2, size = 0.5) +  
+xlab('Soil organic carbon [%]') +
+  ylab("Redox potential [mV]") +
+   scale_color_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+   scale_fill_manual(name = "",
+                     values = c("Grazed" = "#BDDB37","Ungrazed" = "darkgreen")) +
+  theme_pubr(base_size = 18) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+         axis.title.y = element_text(size = 15),
+         axis.title.x = element_text(size = 15),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5))+
+      theme(aspect.ratio = 1/0.7)
+
+
+#redox/sr_root
+lm.redox.sr <- data_grazing %>% 
+  group_by(coast,site, treatment, transect.point) %>%
+  dplyr::summarise(across (c(sr_root, redox), na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error))) 
+
+
+ggplot(lm.redox.sr, aes(y =sr_root_mean , x = redox_mean)) +
+  geom_point(size = 3, stroke = 1, color="black") + 
+ geom_smooth(method ="lm",se=TRUE,alpha = 0.2, size = 0.5) +  
+  ylab('Recution index (0-20 cm)') +
+  xlab("Redox potential (10 cm) [mV]") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1))+
+      theme(aspect.ratio = 0.9/1)
+summary(lm(redox_mean  ~ sr_root_mean, data=lm.redox.sr))
+
+
+library(ggnewscale)
+ggplot(data_grazing, aes(x = rmse.ch4_ppb, y = r2.ch4, color = device, fill = device)) +
+  geom_point() + 
+  xlab(expression('RMSE CH'[4]*' (ppb)')) +
+  ylab(expression('R'^2~' CH'[4]*'')) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        panel.spacing = unit(0, "lines")) +
+  geom_hline(yintercept = 0.85, linetype = "solid", color = "black", size = 1) +
+  geom_vline(xintercept = 5, linetype = "solid", color = "black", size = 1) +
+  scale_color_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  scale_fill_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  new_scale_color() +
+  scale_linetype_manual(name = "Thresholds", values = c("lgr (high)" = "dashed", "licor (high)" = "solid")) +
+  theme_pubr(base_size = 18) +
+  theme(axis.text.y = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        legend.position = "right",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        aspect.ratio = 1/0.99) +
+  guides(fill = "none", color = guide_legend(override.aes = list(fill = NA)))
+```
+
+#STATISTICAL ANALYSIS
+## NMDS
+```{r}
+library(dplyr)
+library(vegan)
+library(ggplot2)
+library(ggrepel)
+
+# 1. Aggregate/prepare the data (assumes 'id' is your unique plot identifier)
+agg_data <- data_grazing %>%
+   # filter(month_name %in% c("March","April","May","June",
+                          #      "July","August","September"))%>%
+  group_by(id, treatment, coast) %>%
+  summarise(
+    redox = mean(redox, na.rm = TRUE),
+    #sr_root = mean(sr_root, na.rm = TRUE),
+    log.pos.flux.ch4.mg.d = mean(log.pos.flux.ch4.mg.d, na.rm = TRUE),
+    bbm_kg_m2_mean = mean(bbm_kg_m2_mean, na.rm = TRUE),
+    abm_kg_m2_mean = mean(abm_kg_m2_mean, na.rm = TRUE),
+   # oc_root = mean(oc_root, na.rm = TRUE),
+   # density_root = mean(density_root, na.rm = TRUE),
+  #  salinity = mean(salinity, na.rm = TRUE),
+    Argentina.anserina = mean(Argentina.anserina, na.rm = TRUE),
+    Artemisia.maritima = mean(Artemisia.maritima, na.rm = TRUE),
+    Atriplex.portulacoides = mean(Atriplex.portulacoides, na.rm = TRUE),
+    Atriplex.prostrata = mean(Atriplex.prostrata, na.rm = TRUE),
+    Elymus.athericus = mean(Elymus.athericus, na.rm = TRUE),
+    Glaux.maritima = mean(Glaux.maritima, na.rm = TRUE),    
+    Juncus.gerardii_Festuca.rubra = mean(Juncus.gerardii_Festuca.rubra, na.rm = TRUE),
+    Juncus.maritimus = mean(Juncus.maritimus, na.rm = TRUE),
+    Limonium.vulgare = mean(Limonium.vulgare, na.rm = TRUE),
+    Phragmites.australis = mean(Phragmites.australis, na.rm = TRUE),
+    Plantago.maritima = mean(Plantago.maritima, na.rm = TRUE),
+    Puccinellia.maritima = mean(Puccinellia.maritima, na.rm = TRUE),
+    Salicornia.europea = mean(Salicornia.europea, na.rm = TRUE),
+    Spartina.anglica = mean(Spartina.anglica, na.rm = TRUE),
+    Spergularia.media = mean(Spergularia.media, na.rm = TRUE),
+    Suaeda.maritima = mean(Suaeda.maritima, na.rm = TRUE),
+    Tripolium.pannonicum = mean(Tripolium.pannonicum, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Remove rows with any NA in environmental data
+env_data <- agg_data %>%
+  select(redox,  log.pos.flux.ch4.mg.d, bbm_kg_m2_mean, abm_kg_m2_mean
+         #salinity, oc_root, density_root,sr_root,
+         ) %>%
+  na.omit()
+
+# Keep only complete rows in both env and species data (safe matching)
+complete_rows <- complete.cases(env_data)
+env_data <- env_data[complete_rows, ]
+
+species_cols <- c("Argentina.anserina","Artemisia.maritima","Atriplex.portulacoides",
+                  "Atriplex.prostrata","Elymus.athericus","Glaux.maritima",
+                  "Juncus.gerardii_Festuca.rubra",
+                  "Juncus.maritimus","Limonium.vulgare","Phragmites.australis",
+                  "Plantago.maritima","Puccinellia.maritima","Salicornia.europea",
+                  "Spartina.anglica","Spergularia.media","Suaeda.maritima","Tripolium.pannonicum")
+
+species_data <- agg_data[complete_rows, species_cols]
+
+# 2. Run NMDS & fit environmental vectors (with aggregated data)
+set.seed(123)
+nmds_result <- metaMDS(species_data, distance = "euclidean", trymax = 1000, autotransform = TRUE)
+ef <- envfit(nmds_result, env_data, perm = 1000, na.rm = TRUE)
+
+#6. NMDS resuls
+nmds_result$stress #0.1543788, akzeptabel 
+stressplot(nmds_result) #Linear fit r2 = 0.976, non-metric fit, R2 = 0.928
+gof <- goodness(nmds_result)
+head(gof)#0.02417495 0.03179958 0.01147596 0.01718154 0.01878888 0.01810513
+
+
+# 3. Extract species scores & assign groups
+species_scores <- as.data.frame(scores(nmds_result, display = "species"))
+species_scores$species <- rownames(species_scores)
+high_species <- c("Phragmites.australis", "Tripolium.pannonicum", "Juncus.maritimus")
+species_scores$assoc_group <- "Other species"
+species_scores$assoc_group[species_scores$species %in% high_species] <- "High-flux species"
+
+# 4. Prepare site scores for ellipses and labels
+site_scores <- as.data.frame(scores(nmds_result, display = "sites"))
+site_scores$treatment <- agg_data$treatment[complete_rows]
+site_scores$coast <- agg_data$coast[complete_rows]
+
+# 5. Prepare environmental vectors (significant only)
+ef_df <- as.data.frame(scores(ef, display = "vectors"))
+ef_df$variable <- rownames(ef_df)
+ef_df <- ef_df[ef$vectors$pvals < 0.05, ]
+ef_df$label <- c(
+  "redox" = "Redox",
+  #"sr_root" = "Reduction~index",
+  "log.pos.flux.ch4.mg.d" = "CH[4]~flux",
+  "bbm_kg_m2_mean" = "Belowground~biomass",
+  "abm_kg_m2_mean" = "Aboveground~biomass"
+ # "oc_root" = "Soil~organic~carbon",
+ # "density_root" = "Soil~bulk~density"
+#  "salinity" = "Salinity"
+)[ef_df$variable]
+
+# 6. NMDS plot with ggplot2
+ggplot() +
+  geom_point(data = species_scores, aes(x = NMDS1, y = NMDS2, color = assoc_group), shape = 3, size = 3) +
+  geom_text_repel(data = species_scores, aes(x = NMDS1, y = NMDS2, label = species, color = assoc_group), size = 5) +
+  stat_ellipse(data = site_scores, aes(x = NMDS1, y = NMDS2, group = treatment, color = treatment), type = "norm", linetype = 1, size = 1.2) +
+  stat_ellipse(data = site_scores, aes(x = NMDS1, y = NMDS2, group = coast, color = coast), type = "norm", linetype = 2, size = 1.2) +
+  geom_segment(data = ef_df, aes(x = 0, y = 0, xend = NMDS1, yend = NMDS2), 
+               arrow = arrow(length = unit(0.2, "cm")), color = "black") +
+  geom_text_repel(data = ef_df, aes(x = NMDS1*1.1, y = NMDS2*1.1, label = label), color = "black", parse=TRUE, size =5) +
+  scale_color_manual(
+    values = c("High-flux species" = "purple", "Other species" = "grey",
+               "Grazed" = "#BDDB37", "Ungrazed" = "darkgreen",
+               "Baltic Sea" = "lightblue", "North Sea" = "darkblue"),
+    breaks = c("Grazed", "Ungrazed","Baltic Sea", "North Sea" ,"High-flux species" , "Low-flux species" , "Other species")
+  ) +
+  labs(color = "Legend") +
+  theme_classic() +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        legend.position = "right",
+        legend.text = element_text(size = 12),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        aspect.ratio = 0.9/1)
+
+
+```
+
+
+## Means
+```{r}
+
+data_grazing_treatment_means <- data_grazing %>%
+  group_by(id, treatment,site) %>%
+  summarise(
+    # once-per-plot variables:
+    bbm_kg_m2_mean_plot = first(bbm_kg_m2_mean),
+    abm_kg_m2_mean_plot = first(abm_kg_m2_mean),
+    oc_root_plot = first(oc_root),
+    density_root_plot = first(density_root),
+    .groups = "drop"
+  ) %>%
+  ungroup() %>%
+  group_by(treatment,site) %>%
+  summarise(
+    # once-per-plot variables: 
+    bbm_kg_m2_mean_mean = mean(bbm_kg_m2_mean_plot, na.rm = TRUE),
+    bbm_kg_m2_mean_se   = std.error(bbm_kg_m2_mean_plot, na.rm = TRUE),
+    abm_kg_m2_mean_mean = mean(abm_kg_m2_mean_plot, na.rm = TRUE),
+    abm_kg_m2_mean_se   = std.error(abm_kg_m2_mean_plot, na.rm = TRUE),
+    oc_root_mean = mean(oc_root_plot, na.rm = TRUE),
+    oc_root_se   = std.error(oc_root_plot, na.rm = TRUE),
+    density_root_mean = mean(density_root_plot, na.rm = TRUE),
+    density_root_se   = std.error(density_root_plot, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ungroup()
+
+#repeated measurements
+data_grazing_treatment_means <- data_grazing %>% 
+  group_by(treatment,site_plot) %>%
+  dplyr::summarise(across (c(flux.ch4.mg.d,
+                           log.pos.flux.ch4.mg.d,
+                           redox,sr_root,
+                           mean.tairC,
+                           mean.tsoil,
+                           mean.rad,
+                           mean.rh,
+                           mean.vwc,
+                           salinity), 
+                           na.rm = TRUE, 
+                           .f = list(mean = mean, se = std.error)))
+
+
+```
+
+## Correlation matrix
+```{r}
+data_grazing_cor_matrix <- data_grazing %>%
+  group_by(id) %>%
+  summarise(
+    redox_mean = mean(redox, na.rm = TRUE),
+    sr_root_mean = mean(sr_root, na.rm = TRUE),
+    log.pos.flux.ch4.mg.d_mean = mean(log.pos.flux.ch4.mg.d, na.rm = TRUE),
+    bbm_kg_m2_mean_mean = first(bbm_kg_m2_mean, na.rm = TRUE),
+    oc_root_mean = first(oc_root, na.rm = TRUE),
+    density_root_mean = first(density_root, na.rm = TRUE),
+    mean.tairC_mean= mean(mean.tairC, na.rm = TRUE),
+    mean.tsoil_mean= mean(mean.tsoil, na.rm = TRUE),
+    mean.rad_mean= mean(mean.rad, na.rm = TRUE),
+    mean.rh_mean= mean(mean.rh, na.rm = TRUE),
+    mean.vwc_mean= mean(mean.vwc, na.rm = TRUE),
+    salinity_mean= mean(salinity, na.rm = TRUE),
+    abm_kg_m2_mean_mean= first(abm_kg_m2_mean, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+library(Hmisc)
+#person by default
+cor_results <- rcorr(as.matrix(data_grazing_cor_matrix[, c(
+  "log.pos.flux.ch4.mg.d_mean",
+  "redox_mean",
+    "sr_root_mean" ,
+    "bbm_kg_m2_mean_mean",
+  "oc_root_mean",
+  "density_root_mean",
+  "mean.vwc_mean",
+  "abm_kg_m2_mean_mean",
+  "salinity_mean",
+  "mean.tairC_mean" ,
+  "mean.tsoil_mean" ,
+  "mean.rh_mean" ,
+  "mean.rad_mean" )]))
+round(cor_results$r, 3)
+round(cor_results$P, 3)
+
+```
+
+## Correlations / Linear Regressions  
+```{r}
+library(lmtest)
+#ch4/sr_root
+lm.sr_root.flux.ch4.mg.d <- data_grazing %>% 
+  group_by(coast,site, treatment, id) %>%
+  dplyr::summarise(across (c(log.pos.flux.ch4.mg.d, sr_root), # use log.pos. methane flux
+                           na.rm = TRUE, 
+                           .f = list(mean= mean, max = max, min = min, se=std.error))) 
+
+
+sr_root.flux.ch4.mg.d<-summary(lm(log.pos.flux.ch4.mg.d_mean ~ sr_root_mean, data=lm.sr_root.flux.ch4.mg.d))
+bptest(sr_root.flux.ch4.mg.d)  # not acceptable, p = 0.003496
+
+cor.test(
+  lm.sr_root.flux.ch4.mg.d$log.pos.flux.ch4.mg.d_mean,
+  lm.sr_root.flux.ch4.mg.d$sr_root_mean,
+  method = "pearson")
+
+
+
+#ch4/redox
+lm.redox.flux.ch4.mg.d <- data_grazing %>% 
+  group_by( treatment, id) %>%
+  dplyr::summarise(across (c(log.pos.flux.ch4.mg.d, redox), # use log.pos. methane flux
+                           na.rm = TRUE, 
+                           .f = list(mean= mean, max = max, min = min, se=std.error))) 
+
+redox.flux.ch4.mg.d<-summary(lm(log.pos.flux.ch4.mg.d_mean ~ redox_mean, data=lm.redox.flux.ch4.mg.d))
+bptest(redox.flux.ch4.mg.d)  # not acceptable, p = 0.024
+cor.test(
+  lm.redox.flux.ch4.mg.d$log.pos.flux.ch4.mg.d_mean,
+  lm.redox.flux.ch4.mg.d$redox_mean,
+  method = "pearson")
+
+
+
+#bbm/oc
+lm.oc_root.bbm <- data_grazing %>%
+  group_by(treatment, id) %>%
+  summarise(bbm_kg_m2_mean = first(bbm_kg_m2_mean),
+    oc_root        = first(oc_root),
+    .groups = "drop")
+
+oc_root.bbm<-summary(lm(bbm_kg_m2_mean ~ oc_root, data=lm.oc_root.bbm))
+bptest(oc_root.bbm) # not acceptable, p = 0.020
+shapiro.test(residuals(oc_root.bbm))
+cor.test(
+  lm.oc_root.bbm$bbm_kg_m2_mean,
+  lm.oc_root.bbm$oc_root,
+  method = "pearson")
+
+
+#oc/sr_root
+lm.oc_root.sr_root <- data_grazing %>%
+  group_by(treatment, id) %>%
+  summarise(sr_root = first(sr_root),
+    oc_root        = first(oc_root),
+    .groups = "drop")
+
+summary(lm(sr_root ~ oc_root, data=lm.oc_root.sr_root))
+cor.test(
+  lm.oc_root.sr_root$sr_root,
+  lm.oc_root.sr_root$oc_root,
+  method = "pearson")
+
+
+#oc/redox
+lm.oc_root.redox <- data_grazing %>%
+  group_by(treatment, id) %>%
+  summarise(redox = mean(redox),
+    oc_root        = first(oc_root),
+    .groups = "drop")
+
+mod<-summary(lm(redox ~ oc_root, data=lm.oc_root.redox))
+shapiro.test(residuals(mod))
+cor.test(
+  lm.oc_root.redox$redox,
+  lm.oc_root.redox$oc_root,
+  method = "pearson")
+
+
+#sr_root / redox
+lm.redox.sr <- data_grazing %>% 
+  group_by(coast,site, treatment, transect.point) %>%
+  dplyr::summarise(across (c(sr_root, redox), na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error))) 
+summary(lm(redox_mean ~ sr_root_mean, data=lm.redox.sr))
+cor.test(
+  lm.redox.sr$redox_mean,
+  lm.redox.sr$sr_root_mean,
+  method = "pearson")
+
+
+
+```
+
+
+## Paired t-tests per treatment
+N=4, per site & treatment
+```{r}
+library(dplyr)
+library(Hmisc)
+
+#paired t.test N=4
+data_grazing_p.w.t.test <- data_grazing %>%
+  group_by(site, treatment) %>%
+  summarise(
+    redox_mean = mean(redox, na.rm = TRUE),
+    sr_root_mean = mean(sr_root, na.rm = TRUE),
+   # flux.ch4.mg.d_mean = mean(flux.ch4.mg.d, na.rm = TRUE),
+    log.pos.flux.ch4.mg.d_mean = mean(log.pos.flux.ch4.mg.d, na.rm = TRUE),
+    mean.tairC_mean = mean(mean.tairC, na.rm = TRUE),
+    mean.tsoil_mean = mean(mean.tsoil, na.rm = TRUE),
+    mean.rad_mean = mean(mean.rad, na.rm = TRUE),
+    mean.rh_mean = mean(mean.rh, na.rm = TRUE),
+    mean.vwc_mean = mean(mean.vwc, na.rm = TRUE),
+    salinity_mean = mean(salinity, na.rm = TRUE),
+    # once-per-plot variables:
+    bbm_kg_m2_mean = first(bbm_kg_m2_mean),
+    abm_kg_m2_mean = first(abm_kg_m2_mean),
+    oc_root = first(oc_root),
+    density_root = first(density_root),
+    .groups = "drop"
+  )
+
+
+data_grazing_p.w.t.test_wide <- data_grazing_p.w.t.test %>%
+  pivot_wider(
+    names_from = treatment,
+    values_from = c(redox_mean, sr_root_mean, log.pos.flux.ch4.mg.d_mean,
+                    bbm_kg_m2_mean, oc_root, density_root,
+                    mean.tairC_mean, mean.tsoil_mean, mean.rad_mean,
+                    mean.rh_mean, mean.vwc_mean, salinity_mean,
+                    abm_kg_m2_mean))
+
+t.test(data_grazing_p.w.t.test_wide$redox_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$redox_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$sr_root_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$sr_root_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$log.pos.flux.ch4.mg.d_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$log.pos.flux.ch4.mg.d_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$bbm_kg_m2_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$bbm_kg_m2_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$oc_root_Grazed, 
+       data_grazing_p.w.t.test_wide$oc_root_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$density_root_Grazed, 
+       data_grazing_p.w.t.test_wide$density_root_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$mean.tairC_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$mean.tairC_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$mean.tsoil_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$mean.tsoil_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$mean.rad_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$mean.rad_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$mean.rh_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$mean.rh_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$mean.vwc_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$mean.vwc_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$salinity_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$salinity_mean_Ungrazed, 
+       paired = TRUE)
+
+t.test(data_grazing_p.w.t.test_wide$abm_kg_m2_mean_Grazed, 
+       data_grazing_p.w.t.test_wide$abm_kg_m2_mean_Ungrazed, 
+       paired = TRUE)
+
+
+
+```
+
+
+## T-tests per site
+N=5, per id & treatment
+```{r}
+library(dplyr)
+library(Hmisc)
+
+#t.test per site, N=5
+data_grazing_t.test <- data_grazing %>%
+  group_by(site, id, treatment) %>%
+  summarise(
+    mean.vwc_mean = mean(mean.vwc, na.rm = TRUE),
+   # flux.ch4.mg.d_mean = mean(flux.ch4.mg.d, na.rm = TRUE),
+    log.pos.flux.ch4.mg.d_mean = mean(log.pos.flux.ch4.mg.d, na.rm = TRUE),
+    # once-per-plot variables:
+    bbm_kg_m2_mean = first(bbm_kg_m2_mean),
+    oc_root = first(oc_root),
+    density_root = first(density_root),
+    .groups = "drop"
+  )%>%
+  filter(site=="NES")
+
+# Log flux CH4
+t.test(log.pos.flux.ch4.mg.d_mean ~ treatment, data = data_grazing_t.test)
+
+# BBM (once per plot)
+t.test(bbm_kg_m2_mean ~ treatment, data = data_grazing_t.test)
+
+# OC root (once per plot)
+t.test(oc_root ~ treatment, data = data_grazing_t.test)
+
+# Density root (once per plot)
+t.test(density_root ~ treatment, data = data_grazing_t.test)
+
+# Volumetric water content
+t.test(mean.vwc_mean ~ treatment, data = data_grazing_t.test)
+
+
+
+```
+
+## Linear mixed-model
+For repeated measurements
+```{r}
+library(lme4)
+
+model <- lmer(log.pos.flux.ch4.mg.d ~ treatment * month_name + (1 | id), data = data_grazing %>% filter (site=="SCH"))
+summary(model)
+emmeans(model, pairwise ~ treatment, adjust = "tukey")
+
+```
+
+
+
+
