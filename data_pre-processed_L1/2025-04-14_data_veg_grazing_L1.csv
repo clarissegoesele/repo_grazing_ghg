@@ -1,0 +1,49 @@
+"","coast","site","site_full","treatment","transect.point","total_cover","veg_categories","dominant_species","mixed_species","all_species","Argentina.anserina","Artemisia.maritima","Atriplex.laciniata","Atriplex.portulacoides","Atriplex.prostrata","Elymus.athericus","Festuca.rubra","Glaux.maritima","Juncus.gerardii","Juncus.maritimus","Limonium.vulgare","Phragmites.australis","Plantago.maritima","Puccinellia.maritima","Salicornia.europea","Spartina.anglica","Spergularia.media","Suaeda.maritima","Tripolium.pannonicum"
+"1","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","2",70,"mixed",NA,"Artemisia.maritima, Puccinellia.maritima","Artemisia.maritima, Puccinellia.maritima",0,28,0,0,2,0,0,0,0,0,0,0,0,40,0,0,0,0,0
+"2","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","3",111,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,0,0,0,0,0,0,12,85,12,0,2,0,0
+"3","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","1",114,"mixed",NA,"Glaux.maritima, Puccinellia.maritima","Glaux.maritima, Puccinellia.maritima",0,0,0,0,0,0,0,40,0,0,4,0,0,40,30,0,0,0,0
+"4","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","2",82,"mixed",NA,"Artemisia.maritima, Juncus.maritimus","Artemisia.maritima, Juncus.maritimus",0,25,0,0,1,0,0,0,0,35,0,3,0,18,0,0,0,0,0
+"5","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","3",65,"mixed",NA,"Atriplex.prostrata, Puccinellia.maritima","Atriplex.prostrata, Puccinellia.maritima",0,10,0,0,15,0,0,0,0,0,0,10,0,30,0,0,0,0,0
+"6","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","4",52,"mixed",NA,"Artemisia.maritima, Juncus.maritimus","Artemisia.maritima, Juncus.maritimus",0,25,0,0,0,0,0,0,0,22,0,0,0,0,0,0,0,0,5
+"7","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","5",68,"mixed",NA,"Artemisia.maritima, Puccinellia.maritima","Artemisia.maritima, Puccinellia.maritima",0,20,0,0,8,0,0,0,0,10,0,0,0,30,0,0,0,0,0
+"8","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","1",110,"dominant","Plantago.maritima",NA,"Plantago.maritima",0,0,0,0,0,0,0,5,10,0,1,0,60,30,2,0,2,0,0
+"9","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","2",132,"dominant","Festuca.rubra",NA,"Festuca.rubra",0,0,0,0,0,0,70,12,10,0,7,7,3,20,0,0,3,0,0
+"10","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","4",134,"dominant","Festuca.rubra",NA,"Festuca.rubra",0,0,0,0,0,0,65,5,0,0,10,2,20,0,22,0,2,0,8
+"11","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","5",113,"dominant","Festuca.rubra",NA,"Festuca.rubra",0,0,0,0,0,0,50,3,3,0,0,0,20,0,35,0,2,0,0
+"12","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","1",85,"mixed",NA,"Festuca.rubra, Phragmites.australis","Festuca.rubra, Phragmites.australis",0,0,0,0,5,0,40,0,0,15,0,25,0,0,0,0,0,0,0
+"13","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","2",60,"dominant","Phragmites.australis",NA,"Phragmites.australis",0,0,0,0,0,0,0,0,0,0,0,60,0,0,0,0,0,0,0
+"14","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","3",60,"mixed",NA,"Phragmites.australis, Tripolium.pannonicum","Phragmites.australis, Tripolium.pannonicum",0,0,0,0,0,0,0,0,0,0,0,45,0,0,0,0,0,0,15
+"15","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","4",92,"mixed",NA,"Juncus.maritimus, Puccinellia.maritima","Juncus.maritimus, Puccinellia.maritima",0,0,0,0,0,0,0,0,0,25,0,10,25,30,0,0,0,0,2
+"16","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","5",60,"mixed",NA,"Festuca.rubra, Juncus.maritimus","Festuca.rubra, Juncus.maritimus",0,0,0,0,0,0,15,0,0,20,0,5,8,0,4,0,0,0,8
+"17","North Sea","MET","Mettgrund (MET)","Grazed","1",109,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,10,0,0,0,0,0,0,80,5,0,10,4,0
+"18","North Sea","MET","Mettgrund (MET)","Grazed","2",109,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,0,15,0,0,0,0,0,75,7,0,5,7,0
+"19","North Sea","MET","Mettgrund (MET)","Grazed","3",120,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,0,10,0,0,0,0,0,50,20,0,5,35,0
+"20","North Sea","MET","Mettgrund (MET)","Grazed","4",107,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,1,0,0,0,0,0,0,2,0,0,70,18,0,8,8,0
+"21","North Sea","MET","Mettgrund (MET)","Grazed","5",102,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,0,0,0,0,0,0,0,70,18,0,10,4,0
+"22","North Sea","MET","Mettgrund (MET)","Not grazed","1",95,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,20,0,75,0,0,0,0,0,0,0,0,0,0,0,0,0
+"23","North Sea","MET","Mettgrund (MET)","Not grazed","2",106,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,8,3,25,0,0,0,0,0,0,0,50,8,0,0,12,0
+"24","North Sea","MET","Mettgrund (MET)","Not grazed","3",97,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,20,3,70,0,0,0,0,1,0,0,0,0,0,0,3,0
+"25","North Sea","MET","Mettgrund (MET)","Not grazed","4",90,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,0,90,0,0,0,0,0,0,0,0,0,0,0,0,0
+"26","North Sea","MET","Mettgrund (MET)","Not grazed","5",103,"dominant","Suaeda.maritima",NA,"Suaeda.maritima",0,0,0,0,0,0,0,0,0,0,0,0,0,5,3,20,0,60,15
+"27","North Sea","MET","Mettgrund (MET)","Not grazed","0.1",85,"mixed",NA,"Puccinellia.maritima, Spartina.anglica","Puccinellia.maritima, Spartina.anglica",0,0,0,0,0,0,0,0,0,0,0,0,0,30,10,40,0,5,0
+"28","North Sea","MET","Mettgrund (MET)","Not grazed","0.2",110,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,15,0,0,0,0,0,0,0,0,50,0,10,0,35,0
+"29","North Sea","NES","Nessmersiel (NES)","Grazed","1",68,"mixed",NA,"Salicornia.europea, Spartina.anglica","Salicornia.europea, Spartina.anglica",0,0,0,0,0,0,0,0,0,0,0,0,0,0,40,28,0,0,0
+"30","North Sea","NES","Nessmersiel (NES)","Grazed","2",101,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,2,0,0,1,0,0,0,0,0,92,1,0,0,0,5
+"31","North Sea","NES","Nessmersiel (NES)","Grazed","3",88,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,15,70,0,0,0,0,0,0,0,0,0,0,3,0,0
+"32","North Sea","NES","Nessmersiel (NES)","Grazed","4",84,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,0,60,0,7,0,0,0,0,0,2,0,15,0,0,0
+"33","North Sea","NES","Nessmersiel (NES)","Grazed","5",85,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",0,0,0,0,0,0,0,0,0,0,0,0,0,68,7,10,0,0,0
+"34","North Sea","NES","Nessmersiel (NES)","Not grazed","1",99,"mixed",NA,"Puccinellia.maritima, Spartina.anglica","Puccinellia.maritima, Spartina.anglica",0,0,0,0,0,0,0,0,0,0,1,0,0,38,20,25,15,0,0
+"35","North Sea","NES","Nessmersiel (NES)","Not grazed","2",85,"dominant","Tripolium.pannonicum",NA,"Tripolium.pannonicum",0,0,0,20,0,0,0,0,0,0,0,0,0,0,0,0,0,0,65
+"36","North Sea","NES","Nessmersiel (NES)","Not grazed","3",70,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,0,70,0,0,0,0,0,0,0,0,0,0,0,0,0
+"37","North Sea","NES","Nessmersiel (NES)","Not grazed","4",98,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,0,95,0,0,0,0,0,0,0,0,0,0,0,0,3
+"38","North Sea","NES","Nessmersiel (NES)","Not grazed","5",50,"mixed",NA,"Atriplex.prostrata, Elymus.athericus","Atriplex.prostrata, Elymus.athericus",0,0,0,0,15,35,0,0,0,0,0,0,0,0,0,0,0,0,0
+"39","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","3",50,"mixed",NA,"Phragmites.australis, Puccinellia.maritima","Phragmites.australis, Puccinellia.maritima",3,0,0,0,0,0,0,0,3,0,0,4,0,40,0,0,0,0,0
+"40","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","4",84,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",15,0,0,0,1,0,0,0,0,0,0,0,0,65,2,0,1,0,0
+"41","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","5",85,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",15,0,0,0,0,0,0,0,0,0,0,0,9,60,0,0,1,0,0
+"42","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","1",98,"dominant","Puccinellia.maritima",NA,"Puccinellia.maritima",18,10,0,0,0,0,0,0,0,0,0,0,0,70,0,0,0,0,0
+"43","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","1",60,"mixed",NA,"Phragmites.australis, Tripolium.pannonicum","Phragmites.australis, Tripolium.pannonicum",0,0,0,0,0,0,0,0,0,0,0,20,0,15,5,0,0,0,20
+"44","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","2",57,"mixed",NA,"Juncus.gerardii, Tripolium.pannonicum","Juncus.gerardii, Tripolium.pannonicum",0,0,0,0,0,0,0,0,40,0,0,7,0,0,0,0,0,0,10
+"45","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","3",88,"dominant","Glaux.maritima",NA,"Glaux.maritima",0,0,0,0,0,0,0,70,11,0,0,1,0,0,0,0,0,0,6
+"46",NA,NA,NA,"Not grazed","110",83,"mixed",NA,"Puccinellia.maritima, Spartina.anglica","Puccinellia.maritima, Spartina.anglica",0,0,0,0,0,0,0,0,0,0,0,0,0,40,8,35,0,0,0
+"47",NA,NA,NA,"Not grazed","240",105,"mixed",NA,"Plantago.maritima, Puccinellia.maritima","Plantago.maritima, Puccinellia.maritima",0,25,0,5,0,0,0,0,0,0,5,0,30,40,0,0,0,0,0
+"48",NA,NA,NA,"Not grazed","370",95,"dominant","Elymus.athericus",NA,"Elymus.athericus",0,0,0,0,0,95,0,0,0,0,0,0,0,0,0,0,0,0,0

@@ -1,0 +1,159 @@
+---
+title: "GHG_stats&figures"
+output: html_document
+---
+
+#Notes
+Packages
+```{r Packages, warning=FALSE, message=FALSE, results='hide'}
+library(lmtest)
+library(dplyr)
+library(lubridate)
+library(data.table)
+library(ggplot2)
+library(Metrics)
+library(ggpubr)
+library(plotrix)
+library(jpeg)
+```
+
+# Load data
+```{r}
+## Set working directory
+today_date <- Sys.Date()
+
+library(here)
+
+files <- list.files(
+  here("data_pre-processed_L1"),
+  pattern = "_L1\\.csv$",
+  full.names = TRUE
+)
+
+print(files)
+
+# Loop through each file, read it, and assign it to a dataframe with its original name
+for (file in files) {
+  # Extract base filename (without extension)
+  df_name <- tools::file_path_sans_ext(basename(file))
+  
+  # Remove the date prefix (YYYY-MM-DD_)
+  df_name <- sub("^\\d{4}-\\d{2}-\\d{2}_", "", df_name)
+  
+  # Remove the "_L1" suffix
+  df_name <- sub("_L1$", "", df_name)
+  
+  # Read the file and assign it to the new dataframe
+  assign(df_name, read.csv(file, dec = ",", sep = ","))
+}
+
+for (obj in ls(pattern = "^data_")) {
+  tmp <- get(obj)
+  
+  # Only drop first column if it's NOT the ghg dataframe
+  if (obj != "data_ghg_grazing") {
+    tmp <- tmp[, -1]
+  }
+  
+  # New object name: remove "_grazing" if present
+  new_name <- sub("_grazing$", "", obj)
+  
+  # Assign to new name
+  assign(new_name, tmp)
+  
+  # Remove the old one if the name changed
+  if (new_name != obj) {
+    rm(list = obj)
+  }
+}
+
+
+
+
+# Check what's loaded
+print(ls(pattern = "^data_"))
+
+```
+
+
+```{r}
+# set columns according to value
+data_cstock <- data_cstock %>%
+  mutate(across(c(1:5), as.factor))
+
+data_ghg <- data_ghg %>%
+  mutate(across(c(1:5), as.factor))
+
+data_veg <- data_veg %>%
+  mutate(across(c(1:5), as.factor)) 
+
+data_iris <- data_iris %>%
+  mutate(across(c(1:5), as.factor)) 
+
+data_elevation <- data_elevation %>%
+  mutate(across(c(1:5), as.factor)) 
+
+#rename date from ghg and iris dataframes to avoid .x / .y
+data_ghg<-data_ghg%>%
+  rename(date.ghg = date) 
+
+```
+
+## MERGE
+data_cstock 
+data_ghg 
+data_veg
+data_iris
+data_elevation
+
+
+```{r}
+# Merge data frames by common columns
+
+
+#iris
+data_grazing <- merge(data_ghg,
+                     data_iris,
+                     by = c("coast", "site", "site_full","treatment", "transect.point", "campaign"), 
+                     all = TRUE)
+
+#cstock
+data_grazing <- merge(data_grazing, 
+                     data_cstock, 
+                     by = c("coast", "site", "site_full","treatment", "transect.point"), 
+                     all = TRUE)
+
+
+#elevation
+data_grazing <- merge(data_grazing, 
+                     data_elevation, 
+                     by = c("coast", "site", "site_full","treatment", "transect.point"), 
+                     all = TRUE)
+
+#dominant species
+data_grazing <- merge(data_grazing,
+                     data_veg,
+                     by = c("coast", "site", "site_full","treatment", "transect.point"), 
+                     all = TRUE)
+
+
+print(data_grazing)
+
+test<-data_grazing%>%#
+  select(coast,site,treatment,transect.point,campaign,date.ghg,date.insertion,date.retrieval, month_name.ghg,month_name.iris, season.ghg,season.iris)
+```
+
+
+
+
+### Extract data frame: today_date_data_grazing
+```{r}
+print(data_grazing)
+
+outfile <- here("data_processed_L2", paste0(today_date, "_data_grazing_L2.csv"))
+
+# Save the dataframe
+write.csv(data_grazing, outfile, row.names = FALSE)
+
+```
+

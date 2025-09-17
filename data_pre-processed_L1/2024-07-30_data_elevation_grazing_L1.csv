@@ -1,0 +1,49 @@
+"","coast","site","site_full","treatment","transect.point","elevation","east","north","lon","lat"
+"1","North Sea","HAH","Hamburger Hallig (HAH)","Not grazed","110",-0.352,488154.01,6050548.87,8.81662468,54.60226581
+"2","North Sea","HAH","Hamburger Hallig (HAH)","Not grazed","240",0.002,488185.8,6050509.18,8.81711838,54.60190989
+"3","North Sea","HAH","Hamburger Hallig (HAH)","Not grazed","370",0.41,488271.04,6050481.01,8.81843904,54.60165866
+"4","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","1",-1.384,629575.82,6027310.88,10.99496234,54.37707809
+"5","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","2",-1.384,629651.94,6027334.86,10.99614392,54.37727414
+"6","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","3",-1.606,629678.39,6027327.45,10.99654765,54.37720084
+"7","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","4",-1.46,629742.56,6027421.09,10.9975759,54.37802559
+"8","Baltic Sea","HEI","Heiligenhafen (HEI)","Grazed","5",-1.36,629786,6027512.46,10.99828406,54.37883524
+"9","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","1",-1.704,629146.72,6027417.91,10.98840684,54.37814841
+"10","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","2",-1.268,629191.76,6027467.38,10.98912127,54.37858129
+"11","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","3",-1.402,629191.07,6027477.58,10.98911507,54.37867315
+"12","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","4",-1.466,629213.82,6027505.84,10.98947738,54.37892118
+"13","Baltic Sea","HEI","Heiligenhafen (HEI)","Not grazed","5",-1.498,629237.52,6027540.95,10.98985728,54.37923052
+"14","North Sea","MET","Mettgrund (MET)","Grazed","1",0.116,497065.06,6039433.08,8.95467805,54.50249764
+"15","North Sea","MET","Mettgrund (MET)","Grazed","2",0.164,497031.98,6039539.75,8.95416611,54.5034561
+"16","North Sea","MET","Mettgrund (MET)","Grazed","3",0.086,497049.88,6039643.36,8.95444152,54.50438736
+"17","North Sea","MET","Mettgrund (MET)","Grazed","4",0.054,497008.99,6039722.05,8.95380934,54.5050943
+"18","North Sea","MET","Mettgrund (MET)","Grazed","5",0.07,496915.32,6039719.09,8.95236269,54.50506712
+"19","North Sea","MET","Mettgrund (MET)","Not grazed","1",-0.022,497205.49,6039452.23,8.95684649,54.50267047
+"20","North Sea","MET","Mettgrund (MET)","Not grazed","2",0.004,497146.25,6039546.8,8.95593071,54.50352009
+"21","North Sea","MET","Mettgrund (MET)","Not grazed","3",0.092,497142.38,6039654.96,8.95586993,54.50449213
+"22","North Sea","MET","Mettgrund (MET)","Not grazed","4",0.062,496867.64,6039887.23,8.95162465,54.50657796
+"23","North Sea","MET","Mettgrund (MET)","Not grazed","5",0.018,497003.75,6039922.46,8.95372627,54.50689536
+"24","North Sea","MET","Mettgrund (MET)","Not grazed","0.1",-0.396,497557.76,6039541.63,8.96228554,54.50347575
+"25","North Sea","MET","Mettgrund (MET)","Not grazed","0.2",0.054,497545.49,6039539.12,8.96209599,54.50345312
+"26","North Sea","NES","Nessmersiel (NES)","Grazed","1",-0.722,388839.54,5949588.44,7.31685815,53.68317672
+"27","North Sea","NES","Nessmersiel (NES)","Grazed","2",-0.186,389056.54,5949279.98,7.32025259,53.68045148
+"28","North Sea","NES","Nessmersiel (NES)","Grazed","3",-0.23,388713.3,5949263.44,7.31506413,53.68022986
+"29","North Sea","NES","Nessmersiel (NES)","Grazed","4",-0.14,388537.32,5949049.48,7.3124779,53.67827005
+"30","North Sea","NES","Nessmersiel (NES)","Grazed","5",-0.222,388031.4,5948955.9,7.3048558,53.67732112
+"31","North Sea","NES","Nessmersiel (NES)","Not grazed","1",-0.528,390190.92,5949671.3,7.3372813,53.68420689
+"32","North Sea","NES","Nessmersiel (NES)","Not grazed","2",-0.476,390354.2,5949480.51,7.33981985,53.68252702
+"33","North Sea","NES","Nessmersiel (NES)","Not grazed","3",-0.156,390008.02,5949496.64,7.33457499,53.68259916
+"34","North Sea","NES","Nessmersiel (NES)","Not grazed","4",-0.24,390519.1,5949363.04,7.34235709,53.68150614
+"35","North Sea","NES","Nessmersiel (NES)","Not grazed","5",-0.386,389921.11,5949280.17,7.33333653,53.68063598
+"36","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","1",-1.56,565955.01,6061029.21,10.02325563,54.69227146
+"37","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","2",-1.402,565978.69,6061070.07,10.02363226,54.69263554
+"38","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","3",-1.196,566007.69,6061110.41,10.02409117,54.69299422
+"39","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","4",-1.672,565884.19,6061097.27,10.02217258,54.69289225
+"40","Baltic Sea","SCH","Schleimünde (SCH)","Grazed","5",-1.622,565872.86,6061182.74,10.02201607,54.69366171
+"41","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","1",-1.656,565819.43,6061092.71,10.02116699,54.69285981
+"42","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","2",-1.822,565796.29,6061130.72,10.02081657,54.69320431
+"43","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","3",-1.676,565780.71,6061174.68,10.02058484,54.69360141
+"44","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","4",-1.722,565714.54,6061096.39,10.01954065,54.69290658
+"45","Baltic Sea","SCH","Schleimünde (SCH)","Not grazed","5",-1.676,565732.88,6061186.78,10.0198456,54.69371636
+"46","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","1",-1.796,583735.54,6031660.82,10.29067977,54.42576041
+"47","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","2",-1.66,583763.09,6031703.04,10.29111634,54.42613514
+"48","Baltic Sea","WNT","Wendtorf (WNT)","Not grazed","3",-1.6,583783.97,6031790.87,10.29146286,54.42692091

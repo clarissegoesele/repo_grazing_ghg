@@ -1,0 +1,1190 @@
+---
+title: "GHG_1_dataset for grazing and merit"
+output: html_document
+---
+
+## Notes
+Packages
+```{r Packages, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+library(lmtest)
+library(dplyr)
+library(lubridate)
+library(data.table)
+library(ggplot2)
+library(Metrics)
+library(ggpubr)
+library(plotrix)
+library(jpeg)
+library(tidyr)
+```
+
+
+## Load data
+```{r LOAD DATA, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+today_date <- Sys.Date()
+library(here)
+
+file<-list.files(
+  here("data_pre-processed_L0"),
+  pattern = "_L0\\.csv$",
+  full.names = TRUE)
+
+data <- read.csv(file, dec = ",", sep = ",")
+
+today_date <- Sys.Date()
+
+data <- data[ , -1]
+
+
+```
+
+## Wragling 
+
+Set columns according to value
+
+Detect & delete malfunctioning data
+
+Rename factors
+
+Take out dark measurements
+```{r Wragling, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+library(lubridate)
+#CHANGE HELSINKI TIMEZONE!
+data <- data %>%
+  mutate(real.time = as.numeric(real.time),  # Convert character to numeric
+         real.time = as.POSIXct(real.time, origin = "1970-01-01", tz = "Europe/Berlin"))%>%
+  mutate(real.time = with_tz(real.time, tzone = "Europe/Helsinki"))%>%
+  rename(datetime=real.time)
+#CHANGE HELSINKI TIMEZONE!
+
+data <- data %>%
+  mutate(fDOY = .[[8]]) %>%
+  relocate(fDOY, .after = 8) %>%
+  mutate(across(9, as.numeric))
+
+data$date <- as.numeric(data$date)
+data$date <- as.Date(data$date, origin = "1970-01-01", tz = "Europe/Berlin")
+data <- data %>%
+  mutate(time = format(datetime, "%H:%M:%S"))
+
+#sort columns
+data <- data %>%
+  select(site, treatment, transect.point, date, time, datetime, fDOY, ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes, area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, p.ch4, sd.ch4, se.ch4, r2.ch4, rmse.ch4, 
+         flux.co2.mmol, p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, rmse.h2o_licor_ch4,
+         flux.n2o.umol, p.n2o, sd.n2o, se.n2o, r2.n2o, rmse.n2o,
+         flux.h2o.mmol_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, rmse.h2o_licor_n2o,
+  everything())
+
+#set columns according to value
+data <- data %>%
+  mutate(across(c(1, 2, 8, 9,10), as.factor)) %>%  
+  mutate(across(16:ncol(data), as.numeric))
+
+
+# malfunctioning device data
+# Exlcude tsoil data < -10
+data$mean.tsoil[which(data$mean.tsoil < -10, "mean.tsoil")] <- NA
+
+# clean treatment errors
+data$treatment <- recode_factor(data$treatment, "g " = "g")
+data$treatment <- recode_factor(data$treatment, "pz " = "pz")
+
+#add exctra pioneer plot names (0.1, 0.2) for treatment naming
+#data <- data %>%
+#  mutate(transect.point = if_else(transect.point== "1" & treatment == "pz","0.1",
+#                                  if_else(transect.point== "2" & treatment == "pz", "0.2",
+ ##                                         transect.point)))
+data$transect.point<-as.factor(data$transect.point)
+data$treatment <- recode_factor(data$treatment, "pz" = "ng")
+
+# delete Polder measurements
+data <- subset(data, !(treatment %in% c("po")))
+
+# Convert transect.point to character
+data$transect.point <- as.character(data$transect.point)
+
+
+# delete dark measurements
+#levels(data$dark.light)
+data <- subset(data, !(dark.light %in% c("D")))
+data <- subset(data, !(dark.light %in% c("D ")))
+
+print(data)
+```
+
+Delete measurement "error"
+```{r Delet measurement "error", echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+# count how many measurements are double, triple, four times or more
+count_twice_measurements <- data %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  filter(n() >= 2) %>%
+  summarise(count = n())
+print(count_twice_measurements)
+print(nrow(count_twice_measurements))
+print(sum(count_twice_measurements$count == 2))
+print(sum(count_twice_measurements$count == 3))
+
+#### Triple measurements
+#MET	2023-08-10	2	g	L	ch4/n2o	16:10:00 -> second flux of three 
+data <- subset(data, !(site %in% c("MET") & 
+                         transect.point %in% c("2") & 
+                         treatment %in% c("g") &
+                         #ghg %in% c("ch4") & ch4 and n2o
+                         date %in% as.Date("2023-08-10") &
+                         time %in% c("16:10:00")))
+
+#MET	2023-08-11	3	ng	L	ch4/n2o	11:04:00 -> third flux of three 
+data <- subset(data, !(site %in% c("MET") & 
+                         transect.point %in% c("3") & 
+                         treatment %in% c("ng") &
+                         #ghg %in% c("ch4") & ch4 and n2o
+                         date %in% as.Date("2023-08-11") &
+                         time %in% c("11:04:00")))
+
+#NES	2023-09-04	5	g	L	ch4 16:56:00 -> first flux of three
+data <- subset(data, !(site %in% c("NES") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("g") &
+                         #ghg %in% c("ch4") & ch4 and n2o
+                         date %in% as.Date("2023-09-04") &
+                         time %in% c("16:56:00")))
+```
+
+Flux revision list (notes during flux calculation)
+```{r Flux revision list, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+# delete fluxes (incl. auxiliary parameter)
+data <- subset(data, !(site %in% c("NES") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-02-08") &
+                         time %in% c("17:05:00")))
+
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("1") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-11-03") &
+                         time %in% c("10:37:00")))
+
+# deleted first measurements bc. rmse >5 and second measurements better
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("1") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-08-08") &
+                         rmse.ch4 > 0.004))
+
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-08-08")&
+                         rmse.ch4 > 0.005))
+
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("3") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") & 
+                         date %in% as.Date("2023-08-08")&
+                         time %in% c("14:34:00")))
+
+data <- subset(data, !(site %in% c("MET") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-08-10")&
+                         time %in% c("17:43:00")&
+                         rmse.ch4 > 0.006))
+
+
+# correct protocol error, transect.point 4 was transect.point 2
+data <- data %>%
+  mutate(
+    site = as.character(site),
+    treatment = as.character(treatment),
+    transect.point = as.character(transect.point))
+data <- data %>%
+  mutate(transect.point = case_when(
+    site %in% c("NES") &
+      treatment %in% c("g") & 
+      date %in% as.Date("2023-11-22") & 
+      transect.point %in% "4" ~ "2",
+    TRUE ~ transect.point))
+
+data <- data %>%
+  mutate(
+    site = as.factor(site),
+    treatment = as.factor(treatment),
+    transect.point = as.factor(transect.point))
+
+# ch4.rmse, take out ch4.rmse <5 after new calculations
+data <- subset(data, !(site %in% c("MET") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-03-30") &
+                         rmse.ch4 > 0.005))
+
+data <- subset(data, !(site %in% c("HEI") & 
+                         transect.point %in% c("3") & 
+                         treatment %in% c("g") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-04-03") &
+                         rmse.ch4 > 0.005))
+
+# still above 5, bc high flux
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("2") & 
+                         treatment %in% c("ng") &
+                         #ghg %in% c("ch4") &
+                         date %in% as.Date("2023-06-21")&
+                         rmse.ch4 > 0.006))
+
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("5") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-09-19") &
+                         rmse.ch4 > 5))
+
+# still above 5, bc high flux
+data <- subset(data, !(site %in% c("SCH") & 
+                         transect.point %in% c("1") & 
+                         treatment %in% c("ng") &
+                         ghg %in% c("ch4") &
+                         date %in% as.Date("2023-09-19") &
+                         rmse.ch4 > 6))
+
+#NA bad CO2 fluxes IF you will use CO2
+#data1 <- data1 %>%
+ # mutate(col3 = ifelse(col1 %in% c("value1", "value2") & col2 %in% c("valueA", "valueB"), NA, col3),
+  #       col4 = ifelse(col1 %in% c("value1", "value2") & col2 %in% c("valueA", "valueB"), NA, col4))
+
+```
+
+
+### Double measurements -> mean 
+#### Testing
+
+No significant difference between first and second measurement (p=0.8753), therefore double measurements are currently averaged
+
+```{r Inspect difference between first and second measurement, echo=FALSE, warning=FALSE, message=FALSE}
+# count how many measurements are double, triple, four times or more
+count_twice_measurements <- data %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  filter(n() >= 2) %>%
+  summarise(count = n())
+#print(count_twice_measurements)
+#print(nrow(count_twice_measurements))
+#print(sum(count_twice_measurements$count == 2))
+
+
+# subset double measurements
+data_double <- data %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  filter(n() >= 2) %>%
+  ungroup()
+#print(data_double)
+
+data_double <- data_double %>%
+  mutate(across(everything(), ~ replace(., is.nan(.), NA)))
+
+# Inspect difference between first and second measurement
+data_double2 <- data_double %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  mutate(measurement_number = case_when(
+    row_number() == 1 ~ "one",
+    row_number() == 2 ~ "two",
+    TRUE ~ as.character(row_number())
+  )) %>%
+  ungroup()
+
+data_double2 <- data_double2 %>%
+  mutate(across(everything(), ~ replace(., is.nan(.), NA)))
+
+
+# Create plot with first vs. second measurement 
+data_double3 <- data_double2 %>% 
+  group_by(measurement_number) %>%
+  dplyr::summarise(across (flux.ch4.umol, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_double3, aes(x = measurement_number, y = flux.ch4.umol_mean)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = flux.ch4.umol_mean - flux.ch4.umol_sd, ymax = flux.ch4.umol_mean + flux.ch4.umol_sd), width = 0.2) +
+  ylab(expression('CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("Measurement #") +
+  labs(title = "Measurement #1 vs. #2") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# ttest
+mean(data_double2$flux.ch4.umol[data_double2$measurement_number == "one"], na.rm = TRUE)#172.7583
+mean(data_double2$flux.ch4.umol[data_double2$measurement_number == "two"], na.rm = TRUE)#159.7647
+#print(t.test(flux.ch4.umol ~ measurement_number, data = data_double2))#0.8753
+
+```
+
+Inspect double measurements
+
+If necessary: Threshold for "acceptable" standard deviation
+
+```{r Double measurements testing, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+# inspect double measurements
+library(plotrix)
+library(ggplot2)
+data_double1 <- data_double %>% 
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  dplyr::summarise(across (flux.ch4.umol, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd))) 
+#print(data_double1)
+
+# Create a plot for the mean and standard deviation
+ggplot(data_double1, aes(x = interaction(date), y = flux.ch4.umol_mean, color = site)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = flux.ch4.umol_mean - flux.ch4.umol_sd, ymax = flux.ch4.umol_mean + flux.ch4.umol_sd), width = 0.2) +
+  ylab(expression('mean CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("Date") +
+  labs(title = "Mean CH4 Flux with Standard Deviation") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# Create a plot for the standard deviation
+ggplot(data_double1, aes(x = interaction(date), y = flux.ch4.umol_sd,  color = site)) +
+  geom_point() +
+  #geom_errorbar(aes(ymin = flux.ch4.umol_mean - flux.ch4.umol_se, ymax = flux.ch4.umol_mean + flux.ch4.umol_se), width = 0.2) +
+  ylab(expression('sd CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  xlab("Date") +
+  labs(title = "SD CH4 Flux") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+#### Extract, average, paste
+
+```{r extract, average, paste, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+#subset double measurements, keep one row of two
+data_double <- data %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  filter(n() >= 2) %>%
+  summarise(
+    across(where(is.numeric), mean, na.rm = TRUE),
+    time = first(time),
+    datetime = first(datetime),
+    device = first(device),
+    status.ch4 = first(status.ch4),
+    status.co2 = first(status.co2),
+    status.n2o = first(status.n2o),
+    status.fan = first(status.fan),
+    flag = first(flag)
+  ) %>%
+  ungroup()
+
+data_double <- data_double %>%
+  mutate(across(everything(), ~ replace(., is.nan(.), NA)))
+
+#sort columns
+data_double <- data_double %>%
+  select(site, treatment, transect.point, date, time, datetime, fDOY, ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes,area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, p.ch4, sd.ch4, se.ch4, r2.ch4, rmse.ch4, 
+         flux.co2.mmol, p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, rmse.h2o_licor_ch4,
+         flux.n2o.umol, p.n2o, sd.n2o, se.n2o, r2.n2o, rmse.n2o,
+         flux.h2o.mmol_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, rmse.h2o_licor_n2o,
+  everything())
+
+# exclude all double measurements from original data frame
+data_double1 <- data %>%
+  group_by(site, treatment, transect.point, date, ghg, dark.light) %>%
+  filter(n() >= 2) %>%
+  ungroup()
+
+print(data_double)
+print(data_double1)
+
+data_filtered <- anti_join(data, data_double1, 
+                           by = c("site", "treatment", "transect.point", "date", "ghg", "dark.light"))
+
+# combine data_double with averaged values with original data frame
+data<-rbind(data_filtered,data_double)
+
+```
+
+
+
+
+### Add additional information 
+```{r Add additional information, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+library(dplyr)
+# Correct treatment
+data <- data %>% 
+  mutate(treatment = case_when(treatment == "g" ~ "Grazed",
+                                 treatment == "ng" ~ "Not grazed"))
+
+# Add column with Tair in Celcius
+data <- data%>%
+  mutate(mean.tairC=mean.tair-273)
+
+# Add column with coast
+data <- data %>%
+  mutate(coast = case_when( site %in% c("HAH", "MET", "NES") ~ "North Sea",
+                            site %in% c("HEI", "SCH", "WNT") ~ "Baltic Sea"))
+data$coast<-as.factor(data$coast)
+data$coast <-factor(data$coast, 
+                       levels=c("North Sea","Baltic Sea"))
+
+# Add column with site_full
+data <- data %>% 
+  mutate(site_full = case_when(site == "NES" ~ "Nessmersiel (NES)",
+                                 site == "MET" ~ "Mettgrund (MET)",
+                                 site == "HAH" ~ "Hamburger Hallig (HAH)",
+                                 site == "HEI" ~ "Heiligenhafen (HEI)",
+                                 site == "WNT" ~ "Wendtorf (WNT)",
+                                 site == "SCH" ~ "Schleimünde (SCH)"))
+data$site <-factor(data$site, 
+                       levels=c("NES", "MET", "HAH","HEI", "WNT","SCH"))
+data$site_full <-factor(data$site_full, 
+                       levels=c("Nessmersiel (NES)", 
+                                "Mettgrund (MET)", 
+                                "Hamburger Hallig (HAH)",
+                                "Heiligenhafen (HEI)", 
+                                "Wendtorf (WNT)",
+                                "Schleimünde (SCH)"))
+
+# Add column with month
+date <- (data$date)
+month.ghg <- format(date, "%m")
+data$month.ghg <- month.ghg 
+data$month.ghg <- as.factor(data$month.ghg)
+
+data <- data %>% 
+  mutate(month_name.ghg = case_when(month.ghg == "01" ~ "January",
+                                 month.ghg == "02" ~ "February",
+                                 month.ghg == "03" ~ "March",
+                                 month.ghg == "04" ~ "April",
+                                 month.ghg == "05" ~ "May",
+                                 month.ghg == "06" ~ "June",
+                                 month.ghg == "07" ~ "July",
+                                 month.ghg == "08" ~ "August",
+                                 month.ghg == "09" ~ "September",
+                                 month.ghg == "10" ~ "October",
+                                 month.ghg == "11" ~ "November",
+                                 month.ghg == "12" ~ "December"))
+data$month_name.ghg <-factor(data$month_name.ghg, 
+                       levels=c("January", "February", "March","April", "May","June",
+                                "July","August","September","October","November","December"))
+
+# Add column with season
+data <- data %>% 
+  mutate(season.ghg = case_when(month.ghg == "01" ~ "Winter",
+                                 month.ghg == "02" ~ "Winter",
+                                 month.ghg == "03" ~ "Spring",
+                                 month.ghg == "04" ~ "Spring",
+                                 month.ghg == "05" ~ "Spring",
+                                 month.ghg == "06" ~ "Summer",
+                                 month.ghg == "07" ~ "Summer",
+                                 month.ghg == "08" ~ "Summer",
+                                 month.ghg == "09" ~ "Autumn",
+                                 month.ghg == "10" ~ "Autumn",
+                                 month.ghg == "11" ~ "Autumn",
+                                 month.ghg == "12" ~ "Winter"))
+
+# Add column with campaign.ghg
+data <- data %>% 
+  mutate(campaign = case_when(
+    month.ghg == "02" ~ "zero",
+    month.ghg == "03" & site %in% c("NES", "HAH", "MET") ~ "one",#
+    month.ghg == "04" & site %in% c("HEI", "WNT", "SCH") ~ "one",
+    month.ghg == "05" ~ "two",#
+    month.ghg == "06" ~ "three",
+    month.ghg == "07" & site %in% c("HEI") ~ "three",
+    month.ghg == "08" ~ "four",#
+    month.ghg == "09" ~ "five",#
+    month.ghg == "10" & site %in% c("NES", "HAH", "MET") ~ "six",#
+    month.ghg == "11" & site %in% c("HEI", "WNT", "SCH") ~ "six",
+    month.ghg == "11" & site %in% c("NES") ~ "seven",
+    month.ghg == "12" & site %in% c("MET","HEI", "WNT", "SCH") ~ "seven",
+    TRUE ~ NA_character_
+  ))
+
+# 1 02 february
+# 2 03 march (NES, HAH, MET) & april(HEI; WNT; SCH)
+# 3 05 may
+# 4 06 juni NO HEI
+# 5 07 july HEI & NES
+# 6 08 aug hei, met, sch, hah, nes, wnt
+# 7 09 sep 09, NO WNT
+# 8 10 & 11 10 NES, MET, HAH & 11 SCH, HEI, WNT
+# 9 11 &12 11 NES & 12 MET, HEI, SCH, WNT
+
+
+
+# column wit campaign.iris
+# 1 02
+# 2 03 (MET; NES) 04 (HEI; SCH)
+# 3 05 
+# 4 06 NO HEI
+# 5 07 HEI & NES
+# 6 08 HEI, MET, SCH, 
+# 7 09 
+#to be determined
+# 8 10 & 11
+# 9 11 & 12
+
+
+
+
+# Column with zone
+# MAYbe better in regards to vegetation
+data <- data %>%
+    mutate(zone = case_when(site =="HAH" & substr(as.factor(transect.point),1,1) == "1" ~ "PIO", 
+                            site =="HAH" & substr(as.factor(transect.point),1,1) == "2" ~"LM",
+                            site =="HAH" & substr(as.factor(transect.point),1,1) == "3" ~ "HM",
+                            
+                            #site == "SCH" & treatment == "Grazed" & transect.point == "1" ~ "PIO",
+                            #site == "SCH" & treatment == "Grazed" & transect.point %in% c("2", "3") ~ "HM",
+                            #site == "SCH" & treatment == "Grazed" & transect.point %in% c("4", "5") ~ "LM",
+                            #site == "SCH" & treatment == "Grazed" & transect.point %in% c("1", "4") ~ "PIO",
+                            
+                            TRUE ~ NA_character_))
+
+#print(data1)
+data$zone <- factor(data$zone, levels=c("PIO", "LM", "HM"))
+
+#sort columns
+data <- data %>%
+  select(coast, site, site_full,  treatment, transect.point, zone, date, time, datetime, fDOY, month.ghg, month_name.ghg, season.ghg, campaign, 
+         ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes, area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.tairC, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, p.ch4, sd.ch4, se.ch4, r2.ch4, rmse.ch4, 
+         flux.co2.mmol, p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, rmse.h2o_licor_ch4,
+         flux.n2o.umol, p.n2o, sd.n2o, se.n2o, r2.n2o, rmse.n2o,
+         flux.h2o.mmol_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, rmse.h2o_licor_n2o,
+  everything())
+
+print(data)
+
+```
+
+### Apply volume category
+```{r}
+
+data <- data %>%
+  mutate(
+    flux.ch4.umol = ifelse(is.na(flux.ch4.umol), NA, flux.ch4.umol * chamber.expansion / 100),
+    flux.co2.mmol = ifelse(is.na(flux.co2.mmol), NA, flux.co2.mmol * chamber.expansion / 100),
+    flux.n2o.umol = ifelse(is.na(flux.n2o.umol), NA, flux.n2o.umol * chamber.expansion / 100),
+    flux.h2o.mmol_lgr = ifelse(is.na(flux.h2o.mmol_lgr), NA, flux.h2o.mmol_lgr * chamber.expansion / 100),
+    flux.h2o.mmol_licor_ch4 = ifelse(is.na(flux.h2o.mmol_licor_ch4), NA, flux.h2o.mmol_licor_ch4 * chamber.expansion / 100),
+    flux.h2o.mmol_licor_n2o = ifelse(is.na(flux.h2o.mmol_licor_n2o), NA, flux.h2o.mmol_licor_n2o * chamber.expansion / 100)
+  )
+
+```
+
+
+### Add units
+
+1. GHGmol/m2/day -> GHGmol/m2/hour
+
+2. Column with CH4mmol/m2/h
+
+3. Convert umol/mmol/m²/h to g/m²/h
+
+    use molar mass of GHG: mol mass [g/mol]
+
+    CH4: 16.04
+
+    CO2: 44.01
+
+    N2O: 44.013
+
+4. Column with CH4 & N2O in CO2e (over 20 or 100 year time frame), (Megonigal & Neubauer 2015)
+
+```{r  Add units, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+# Column with  GHGmol/m2/day -> GHGmol/m2/hour 
+data <- data %>%
+  mutate(flux.ch4.umol.h = flux.ch4.umol/ 24,
+         flux.co2.mmol.h = flux.co2.mmol/ 24,
+         flux.h2o.mmol.h_lgr = flux.h2o.mmol_lgr/ 24,
+         flux.h2o.mmol.h_licor_ch4 = flux.h2o.mmol_licor_ch4/ 24,
+         flux.n2o.umol.h = flux.n2o.umol/ 24,
+         flux.h2o.mmol.h_licor_n2o = flux.h2o.mmol_licor_n2o/ 24)
+
+# Column with CH4mmol/m2/h
+data <- data %>%
+  mutate(flux.ch4.mmol.h = flux.ch4.umol.h / 1000,
+         flux.n2o.mmol.h = flux.n2o.umol.h / 1000)
+
+# Column with CO2e (over 100 year timeframe), Megonigal & Neubauer 2015
+data <- data %>%
+  mutate(flux.ch4.mmol.h.co2e = flux.ch4.mmol.h * 32,
+         flux.n2o.mmol.h.co2e = flux.n2o.mmol.h * 263)
+
+#Column with CH4mg/m2/h
+data <- data %>%
+  mutate(flux.ch4.mg.h = flux.ch4.umol.h *(16/1000),
+         flux.n2o.mg.h = flux.n2o.umol.h *(44/1000),
+         flux.co2.mg.h = flux.co2.mmol.h *(44))
+
+data <- data %>%
+  mutate(flux.ch4.mg.d = flux.ch4.mg.h *24,
+         flux.n2o.mg.d = flux.n2o.mg.h *24,
+         flux.co2.mg.d = flux.co2.mg.h *24)
+
+# Column with CH4 Tg yr-1 
+
+
+# Column with CH4 Tg CO2e yr-1 GWP20
+
+
+# Column with CH4 Tg CO2e yr-1 GWP100
+
+
+# Column with N2O Tg yr-1 
+
+
+# Column with N2O Tg CO2e yr-1 GWP20
+
+
+# Column with N2O Tg CO2e yr-1 GWP100
+
+#sort columns
+data <- data %>%
+  select(coast, site, site_full,  treatment, transect.point, zone, date, time, datetime, fDOY, month.ghg, month_name.ghg, season.ghg, campaign, 
+         ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes, area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.tairC, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, flux.ch4.umol.h, flux.ch4.mmol.h, flux.ch4.mmol.h.co2e, flux.ch4.mg.h, flux.ch4.mg.d, p.ch4, sd.ch4, se.ch4, r2.ch4, 
+         rmse.ch4,
+         flux.co2.mmol, flux.co2.mmol.h,flux.co2.mg.h,flux.co2.mg.d, p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, flux.h2o.mmol.h_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, flux.h2o.mmol.h_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, 
+         rmse.h2o_licor_ch4,
+         flux.n2o.umol, flux.n2o.umol.h, flux.n2o.mmol.h, flux.n2o.mmol.h.co2e, flux.n2o.mg.h, flux.n2o.mg.d, p.n2o, sd.n2o, se.n2o, r2.n2o, 
+         rmse.n2o,
+         flux.h2o.mmol_licor_n2o, flux.h2o.mmol.h_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, 
+         rmse.h2o_licor_n2o,
+  everything())
+
+```
+
+
+# "Problems":
+## Device differences (rmse / device)
+Precision: 
+
+*LiCOR*
+
+*N₂O* https://www.licor.com/env/products/soil-flux/LI-7820
+
+Range: 0 to 100 ppm
+
+Precision (1σ):
+
+0.40 ppb at 330 ppb with 1 second averaging
+
+0.20 ppb at 330 ppb with 5 second averaging
+
+  
+
+*CH₄*https://www.licor.com/env/products/trace-gas/LI-7810:
+
+Range: 0 to 100 ppm
+
+Precision (1σ):
+
+0.60 ppb at 2 ppm with 1 second averaging low
+
+0.25 ppb at 2 ppm with 5 second averaging high
+
+Maximum Drift: < 1 ppb per 24-hour period
+
+
+*CO₂*
+
+Range: 0 to 10,000 ppm
+
+Precision (1σ):
+
+3.5 ppm at 400 ppm with 1 second averaging
+
+1.5 ppm at 400 ppm with 5 second averaging
+
+    
+*H₂O*
+
+Range: 0 to 60,000 ppm
+
+Precision (1σ):
+
+45 ppm at 10,000 ppm with 1 second averaging
+
+20 ppm at 10,000 ppm with 5 second averaging
+
+  
+
+*MGGA/LGR*
+
+Sampling conditions:
+
+  Sample temperature: -40 – 50 °C
+  
+  Operating temperature: 5 – 45 °C
+  
+  Ambient humidity: <99% relative humidity non-condensing
+  
+
+Measurement ranges (meets all specifications):
+
+  *CH₄*: 0 – 100 ppm (standard range)
+  
+ *CH₄*: 0 – 1% (extended range)
+  
+ *CO₂*: 0 – 20000 ppm
+  
+  *H₂O*: 0 – 30000 ppm
+  
+
+Precision (1s, 1 sec / 10 sec): 
+
+Concentrations used by ABB for precision testing are unknown 
+
+  *CH₄*: 0.9 ppb / 0.3 ppb(0.0003 ppm) (low/high)
+  
+  *CO₂*: 0.35 ppm / 0.12 ppm 
+  
+  *H₂O*: 200 ppm / 60 ppm
+  
+
+
+
+**Following observations:**
+
+1. rmse (CH₄) / CH₄ flux: most measurements are above the precision of both devices
+
+2. rmse (CH₄) / device: depending on the threshold value (high or low), the rmse are on average less than/equal to the measurement accuracy of the LICORS, but clearly above the measurement accuracy of the LGR. 
+
+3. rmse (CO₂) / device: rmse is on average below the measurement accuracy of the LICORS, but also significantly above the measurement accuracy of the LGR. 
+
+I think, some of the precision do not make much sense, e.g. the 0.35/0.12 ppm CO2 of the MGGA makes NO sense to me, compared to the in general more accurate LiCOR which has a precision of 3.5/1.5ppm. 
+
+I know, Lars said to set the threshold accordingly to the individual data set and not to use the threshold of the devices necessarily. I do not know how to decide this.
+
+
+```{r Device differences, echo=FALSE, warning=FALSE, message=FALSE}
+#rmse from lgr is in ppm, rmse form licor is in ppb 
+data$rmse.ch4_ppb <- ifelse(data$device == "lgr", data$rmse.ch4 * 1000, data$rmse.ch4)
+
+#sort columns
+data <- data %>%
+  select(coast, site, site_full,  treatment, transect.point, zone, date, time, datetime, fDOY, month.ghg, month_name.ghg, season.ghg, campaign, 
+         ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes, area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.tairC, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, flux.ch4.umol.h, flux.ch4.mmol.h, flux.ch4.mmol.h.co2e, flux.ch4.mg.h, flux.ch4.mg.d, p.ch4, sd.ch4, se.ch4, r2.ch4, 
+         rmse.ch4, rmse.ch4_ppb,
+         flux.co2.mmol, flux.co2.mmol.h, flux.co2.mg.h,flux.co2.mg.d,p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, flux.h2o.mmol.h_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, flux.h2o.mmol.h_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, 
+         rmse.h2o_licor_ch4,
+         flux.n2o.umol, flux.n2o.umol.h, flux.n2o.mmol.h, flux.n2o.mmol.h.co2e, flux.n2o.mg.h, flux.n2o.mg.d, p.n2o, sd.n2o, se.n2o, r2.n2o, 
+         rmse.n2o,
+         flux.h2o.mmol_licor_n2o, flux.h2o.mmol.h_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, 
+         rmse.h2o_licor_n2o,
+  everything())
+
+#ch4 rmse
+data_device.ch4 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (rmse.ch4_ppb, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_device.ch4, aes(x = device, y = rmse.ch4_ppb_mean, fill = device)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = rmse.ch4_ppb_mean - rmse.ch4_ppb_se, ymax = rmse.ch4_ppb_mean + rmse.ch4_ppb_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 0.3, linetype = "lgr (high)", color = "lgr (high)"), size = 1) +
+  geom_hline(aes(yintercept = 0.9, linetype = "lgr (low)", color = "lgr (low)"), size = 1) +
+  geom_hline(aes(yintercept = 0.2, linetype = "licor (high)", color = "licor (high)"), size = 1) +
+  geom_hline(aes(yintercept = 0.6, linetype = "licor (low)", color = "licor (low)"), size = 1) +
+  scale_fill_manual(values = c("yellow", "darkgrey")) +
+  ylab(expression('RMSE CH'[4]*'')) +
+  xlab("Device") +
+  labs(title = expression('CH'[4]*' RMSE and device thresholds')) +
+  scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "dashed", "licor (high)" = "dashed",
+                                                        "lgr (low)" = "dashed", "licor (low)" = "dashed")) +
+  scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "orange", "licor (high)" = "#696969",
+                                                     "lgr (low)" = "#CD3700", "licor (low)" = "black")) +
+  theme_minimal()
+
+
+#co2 rmse
+data_device.co2 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (rmse.co2, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_device.co2, aes(x = device, y = rmse.co2_mean, fill = device)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = rmse.co2_mean - rmse.co2_se, ymax = rmse.co2_mean + rmse.co2_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 0.12, linetype = "lgr", color = "lgr"), size = 1) +
+  geom_hline(aes(yintercept = 0.12, linetype = "lgr", color = "lgr"), size = 1) +
+  geom_hline(aes(yintercept = 1.5, linetype = "licor", color = "licor"), size = 1) +
+  geom_hline(aes(yintercept = 1.5, linetype = "licor", color = "licor"), size = 1) +
+  scale_fill_manual(values = c("yellow", "darkgrey")) +
+  ylab(expression('RMSE CO'[2]*'')) +
+  xlab("Device") +
+  labs(title = expression('CO'[2]*' RMSE and device thresholds')) +
+  scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr" = "dashed", "licor" = "dashed")) +
+  scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr" = "orange", "licor" = "black")) +
+  theme_minimal()
+
+
+#h2o rmse
+data_device.h2o1 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (rmse.h2o_lgr, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+data_device.h2o2 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (rmse.h2o_licor_ch4, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+data_device.h2o <- full_join(data_device.h2o1, data_device.h2o2, by = "device")
+
+
+ggplot(data_device.h2o) +
+  geom_bar(aes(x = device, y = rmse.h2o_lgr_mean, fill = "rmse.h2o_lgr"), 
+           stat = 'identity', width = 0.4, position = position_dodge(width = 0.5), size = 1, alpha = 0.5) +
+  geom_bar(aes(x = device, y = rmse.h2o_licor_ch4_mean, fill = "rmse.h2o_licor_ch4"), 
+           stat = 'identity', width = 0.4, position = position_dodge(width = 0.5), size = 1, alpha = 0.5) +
+  geom_errorbar(aes(x = device, ymin = rmse.h2o_lgr_mean - rmse.h2o_lgr_se, 
+                    ymax = rmse.h2o_lgr_mean + rmse.h2o_lgr_se, group = 1), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_errorbar(aes(x = device, ymin = rmse.h2o_licor_ch4_mean - rmse.h2o_licor_ch4_se, 
+                    ymax = rmse.h2o_licor_ch4_mean + rmse.h2o_licor_ch4_se, group = 2), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 60, linetype = "lgr", color = "lgr"), size = 1) +
+  geom_hline(aes(yintercept = 20, linetype = "licor", color = "licor"), size = 1) +
+  scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr" = "dashed", "licor" = "dashed")) +
+  scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr" = "orange", "licor" = "black")) +
+    scale_fill_manual(name = "device", values = c("rmse.h2o_lgr" = "yellow", "rmse.h2o_licor_ch4" = "darkgrey")) +
+  ylab(expression('RMSE H'[2]*'O')) +
+  xlab("Device") +
+  labs(title = expression('H'[2]*'O RMSE and device thresholds')) +
+  theme_minimal()
+
+```
+
+```{r Device differences in R2, echo=FALSE, warning=FALSE, message=FALSE}
+#ch4 r2
+data_device1.ch4 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (r2.ch4, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_device1.ch4, aes(x = device, y = r2.ch4_mean, fill = device)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = r2.ch4_mean - r2.ch4_se, ymax = r2.ch4_mean + r2.ch4_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 0.75, linetype = "R2 Threshold (high)", color = "R2 Threshold (high)"), size = 1) +
+    geom_hline(aes(yintercept = 0.5, linetype = "R2 Threshold (low)", color = "R2 Threshold (low)"), size = 1) +
+  scale_fill_manual(values = c("yellow", "darkgrey")) +
+  ylab(expression('r2 CH'[4]*'')) +
+  xlab("Device") +
+  labs(title = expression('CH'[4]*' r2 and high/low threshold')) +
+ # scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "dashed", "licor (high)" = "dashed",
+   #                                                     "lgr (low)" = "dashed", "licor (low)" = "dashed")) +
+  #scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "orange", "licor (high)" = "#696969",
+   #                                                  "lgr (low)" = "#CD3700", "licor (low)" = "black")) +
+  theme_minimal()
+
+
+#co2 r2
+data_device1.co2 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (r2.co2, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_device1.co2, aes(x = device, y = r2.co2_mean, fill = device)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = r2.co2_mean - r2.co2_se, ymax = r2.co2_mean + r2.co2_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 0.75, linetype = "R2 Threshold (high)", color = "R2 Threshold (high)"), size = 1) +
+    geom_hline(aes(yintercept = 0.5, linetype = "R2 Threshold (low)", color = "R2 Threshold (low)"), size = 1) +
+  scale_fill_manual(values = c("yellow", "darkgrey")) +
+  ylab(expression('r2 CO'[2]*'')) +
+  xlab("Device") +
+  labs(title = expression('CO'[2]*' r2 and device thresholds')) +
+ # scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "dashed", "licor (high)" = "dashed",
+   #                                                     "lgr (low)" = "dashed", "licor (low)" = "dashed")) +
+  #scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "orange", "licor (high)" = "#696969",
+   #                                                  "lgr (low)" = "#CD3700", "licor (low)" = "black")) +
+  theme_minimal()
+
+
+#h2o r2
+data_device1.h2o1 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (r2.h2o_lgr, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+data_device1.h2o2 <- data %>% 
+  group_by(device) %>%
+  dplyr::summarise(across (r2.h2o_licor_ch4, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+data_device1.h2o <- full_join(data_device1.h2o1, data_device1.h2o2, by = "device")
+
+
+ggplot(data_device1.h2o) +
+  geom_bar(aes(x = device, y = r2.h2o_lgr_mean, fill = "r2.h2o_lgr"), 
+           stat = 'identity', width = 0.4, position = position_dodge(width = 0.5), size = 1, alpha = 0.5) +
+  geom_bar(aes(x = device, y = r2.h2o_licor_ch4_mean, fill = "r2.h2o_licor_ch4"), 
+           stat = 'identity', width = 0.4, position = position_dodge(width = 0.5), size = 1, alpha = 0.5) +
+  geom_errorbar(aes(x = device, ymin = r2.h2o_lgr_mean - r2.h2o_lgr_se, 
+                    ymax = r2.h2o_lgr_mean + r2.h2o_lgr_se, group = 1), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_errorbar(aes(x = device, ymin = r2.h2o_licor_ch4_mean - r2.h2o_licor_ch4_se, 
+                    ymax = r2.h2o_licor_ch4_mean + r2.h2o_licor_ch4_se, group = 2), 
+                width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(aes(yintercept = 0.75, linetype = "R2 Threshold (high)", color = "R2 Threshold (high)"), size = 1) +
+    geom_hline(aes(yintercept = 0.5, linetype = "R2 Threshold (low)", color = "R2 Threshold (low)"), size = 1) +
+  scale_fill_manual(values = c("yellow", "darkgrey")) +
+  ylab(expression('r2 H'[2]*'O')) +
+  xlab("Device") +
+  labs(title = expression('H'[2]*'O r2 and device thresholds')) +
+ # scale_linetype_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "dashed", "licor (high)" = "dashed",
+   #                                                     "lgr (low)" = "dashed", "licor (low)" = "dashed")) +
+  #scale_color_manual(name = "Thresholds / Analyser precision", values = c("lgr (high)" = "orange", "licor (high)" = "#696969",
+   #                                                  "lgr (low)" = "#CD3700", "licor (low)" = "black")) +
+  theme_minimal()
+
+```
+
+
+## RMSE threshold (rmse / absolute flux)
+```{r RMSE threshold, echo=FALSE, warning=FALSE, message=FALSE}
+#create absolut flux
+data <- data %>%
+  mutate(flux.ch4.umol.absolut = ifelse(flux.ch4.umol < 0, flux.ch4.umol * -1, flux.ch4.umol))
+
+#sort columns
+data <- data %>%
+  select(coast, site, site_full,  treatment, transect.point, zone, date, time, datetime, fDOY, month.ghg, month_name.ghg, season.ghg, campaign, 
+         ghg, device, dark.light, status.ch4, status.co2, status.n2o, status.fan, 
+         flag, analyzed_minutes, area.m2, volume.m3, chamber_size, chamber.expansion, 
+         air.temp_chamber, air.temp.phone, soil.temp_thermo, salinity, ref.redox, redox, 
+         mean.tair, se.tair, mean.tairC, mean.rh, se.rh, mean.tsoil, se.tsoil, mean.rad, se.rad, mean.vwc, se.vwc, 
+         flux.ch4.umol, flux.ch4.umol.absolut, flux.ch4.umol.h, flux.ch4.mmol.h, flux.ch4.mmol.h.co2e, flux.ch4.mg.h, flux.ch4.mg.d, p.ch4, sd.ch4,
+         se.ch4, r2.ch4, rmse.ch4, rmse.ch4_ppb,
+         flux.co2.mmol, flux.co2.mmol.h,flux.co2.mg.h,flux.co2.mg.d, p.co2, sd.co2, se.co2, r2.co2, rmse.co2, 
+         flux.h2o.mmol_lgr, flux.h2o.mmol.h_lgr, p.h2o_lgr, sd.h2o_lgr, se.h2o_lgr, r2.h2o_lgr, rmse.h2o_lgr, 
+         flux.h2o.mmol_licor_ch4, flux.h2o.mmol.h_licor_ch4, p.h2o_licor_ch4, sd.h2o_licor_ch4, se.h2o_licor_ch4, r2.h2o_licor_ch4, 
+         rmse.h2o_licor_ch4,
+         flux.n2o.umol, flux.n2o.umol.h, flux.n2o.mmol.h, flux.n2o.mmol.h.co2e, flux.n2o.mg.h, flux.n2o.mg.d, p.n2o, sd.n2o, se.n2o, r2.n2o, 
+         rmse.n2o,
+         flux.h2o.mmol_licor_n2o, flux.h2o.mmol.h_licor_n2o, p.h2o_licor_n2o, sd.h2o_licor_n2o, se.h2o_licor_n2o, r2.h2o_licor_n2o, 
+         rmse.h2o_licor_n2o,
+  everything())
+
+
+library(ggnewscale)
+library(ggpubr)
+library(ggplot2)
+ggplot(data, aes(x = flux.ch4.umol.absolut, y = rmse.ch4_ppb, color = device, fill = device)) +
+  geom_point() + 
+  ylab(expression('RMSE CH'[4]*'')) +
+  xlab(expression('CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines")) +
+  geom_hline(aes(yintercept = 0.3, linetype = "lgr (high)", color = "lgr (high)"), size = 1) +
+  geom_hline(aes(yintercept = 0.25, linetype = "licor (high)", color = "licor (high)"), size = 1) +
+  scale_color_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  scale_fill_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+    new_scale_color() +
+  scale_linetype_manual(name = "Thresholds", values = c("lgr (high)" = "dashed", "licor (high)" = "solid")) +
+   labs(title = expression('All CH'[4]*' RMSE against all flux measurements')) +
+   theme_pubclean()+
+  guides(color = guide_legend(override.aes = list(fill = NA)), fill = "none")
+
+
+ggplot(data, aes(x = rmse.ch4_ppb, y = r2.ch4, color = device, fill = device)) +
+  geom_point() + 
+  xlab(expression('RMSE CH'[4]*' (ppb)')) +
+  ylab(expression('R'^2~' CH'[4]*'')) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        panel.spacing = unit(0, "lines")) +
+  geom_hline(yintercept = 0.85, linetype = "solid", color = "black", size = 1) +
+  geom_vline(xintercept = 5, linetype = "solid", color = "black", size = 1) +
+  scale_color_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  scale_fill_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  new_scale_color() +
+  scale_linetype_manual(name = "Thresholds", values = c("lgr (high)" = "dashed", "licor (high)" = "solid")) +
+  theme_pubclean() +
+  theme(axis.text.y = element_text(size = 15),
+        axis.text.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        legend.position = "right",
+        panel.spacing = unit(0, "lines"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        aspect.ratio = 1/0.99) +
+  guides(fill = "none", color = guide_legend(override.aes = list(fill = NA)))
+
+
+```
+
+```{r}
+# subset with rmse > 5 
+data.rmse5 <- data %>%
+  subset(rmse.ch4_ppb>5)
+summary(data$rmse.ch4_ppb)
+
+
+ggplot(data.rmse5, aes(x = flux.ch4.umol.absolut, y = rmse.ch4_ppb, color = device, fill = device)) +
+  geom_point() + 
+  ylab(expression('RMSE CH'[4]*'')) +
+  xlab(expression('CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines")) +
+  geom_hline(aes(yintercept = 0.3, linetype = "lgr (high)", color = "lgr (high)"), size = 1) +
+  geom_hline(aes(yintercept = 0.25, linetype = "licor (high)", color = "licor (high)"), size = 1) +
+  scale_color_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  scale_fill_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+    new_scale_color() +
+  scale_linetype_manual(name = "Thresholds", values = c("lgr (high)" = "dashed", "licor (high)" = "solid")) +
+   labs(title = expression('>5 CH'[4]*' RMSE against all flux measurements')) +
+   theme_pubclean()+
+  guides(color = guide_legend(override.aes = list(fill = NA)), fill = "none")
+
+ggplot(data.rmse5, aes(x = flux.ch4.umol.absolut, y = r2.ch4, color = device, fill = device)) +
+  geom_point() + 
+  ylab(expression('r2 CH'[4]*'')) +
+  xlab(expression('CH'[4]*' flux [umol CH'[4]*' m'^"-2"*' d'^"-1"*']')) +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        legend.position = "none",
+        panel.spacing = unit(0, "lines")) +
+  #geom_hline(aes(yintercept = 0.75, linetype = "Thresholds", color = "Thresholds"), size = 1) +
+  scale_color_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+  scale_fill_manual(values = c("lgr"="red", "licor"="darkgrey")) +
+    new_scale_color() +
+   labs(title = expression('>5rmse CH'[4]*' r2 against all flux measurements')) +
+   theme_pubclean()+
+  guides(color = guide_legend(override.aes = list(fill = NA)), fill = "none")
+
+
+```
+
+
+
+## Volume differences
+
+Mean chamber expansion per treatment & site. 
+
+HAH (Hamburger Hallig) is the only site where I still assume that the chamber was stretched 100% because half of the campaigns were done by a student and this student does neither remember anything nor has pictures of any measurement. 
+
+For the grazing paper, this is not a problem (see Fig. Mean chamber expansion by treatment), because the HAH is mostly warming data for my second manuscript (p=0.8798). 
+
+
+```{r Volume differences, echo=FALSE, warning=FALSE, message=FALSE}
+data_grazing <- data %>%
+  filter(!grepl("^\\d+$", transect.point) | transect.point %in% c("0.1","0.2","1", "2", "3", "4", "5", "110", "240", "370")) 
+
+#figure group by treatment & volume / site & volume (chamber expansion)
+data_chamber.expansion <- data_grazing %>% 
+  group_by(site,treatment) %>%
+  dplyr::summarise(across (chamber.expansion, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+
+ggplot(data_chamber.expansion, aes(x = interaction(treatment,site), y = chamber.expansion_mean)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = chamber.expansion_mean - chamber.expansion_se, ymax = chamber.expansion_mean + chamber.expansion_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  ylab("Chamber expansion") +
+  xlab("Treatment & site") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  labs("Chamber expansion by site & treatment") +
+  theme_minimal()
+
+data_chamber.expansion.site <- data_grazing %>% 
+  group_by(site) %>%
+  dplyr::summarise(across (chamber.expansion, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+ggplot(data_chamber.expansion.site, aes(x = site, y = chamber.expansion_mean)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = chamber.expansion_mean - chamber.expansion_se, ymax = chamber.expansion_mean + chamber.expansion_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  ylab("Chamber expansion") +
+  xlab("Site") +
+  labs("Mean chamber expansion by site") +
+  theme_minimal()
+
+data_chamber.expansion.treatment <- data_grazing %>% 
+  group_by(treatment) %>%
+  dplyr::summarise(across (chamber.expansion, na.rm = TRUE, .f =
+                             list(mean= mean, max = max, min = min, se=std.error, sd=sd)))
+ggplot(data_chamber.expansion.treatment, aes(x = treatment, y = chamber.expansion_mean)) +
+  geom_bar(stat = 'identity', width = 0.5, position = 'dodge', size = 1, alpha = 0.5) +
+  geom_errorbar(aes(ymin = chamber.expansion_mean - chamber.expansion_se, ymax = chamber.expansion_mean + chamber.expansion_se), 
+                width = 0.2, position = position_dodge(0.5)) +
+  ylab("Chamber expansion") +
+  xlab("Treatment") +
+  labs("Mean chamber expansion by treatment") +
+  theme_minimal()
+
+mean(data_grazing$chamber.expansion[data_grazing$treatment=="Grazed"]) #91.02857
+mean(data_grazing$chamber.expansion[data_grazing$treatment=="Not grazed"])#90.97046
+print(t.test(chamber.expansion ~ treatment, data = data_grazing))#0.8798
+
+```
+
+```{r volume mean, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+mean(data_grazing$chamber.expansion[data_grazing$site=="HAH"])#98.69565
+mean(data_grazing$chamber.expansion[data_grazing$site=="MET"])#90.43478
+mean(data_grazing$chamber.expansion[data_grazing$site=="NES"])#91.66667
+mean(data_grazing$chamber.expansion[data_grazing$site=="SCH"])#89.35484
+mean(data_grazing$chamber.expansion[data_grazing$site=="WNT"])#90.35714
+mean(data_grazing$chamber.expansion[data_grazing$site=="HEI"])#90.71429
+
+mean(data_grazing$chamber.expansion[data_grazing$chamber_size=="1"])#91.0989
+mean(data_grazing$chamber.expansion[data_grazing$chamber_size=="0.5"])#90.88608
+
+mean(data_grazing$chamber.expansion[data_grazing$treatment=="Grazed"])#91.01695
+mean(data_grazing$chamber.expansion[data_grazing$treatment=="Not grazed"])#90.96234
+
+```
+
+
+Extract data frame: today_date_data_grazing_L2
+```{r extract df, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+
+print(data)
+
+outfile <- here("data_pre-processed_L1", paste0(today_date, "_data_ghg_grazing_L1.csv"))
+
+# Save the dataframe
+write.csv(data, outfile, row.names = FALSE)
+
+```
+
+

@@ -44,12 +44,37 @@ library(ggpubr)
 ```{r LOAD DATA, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
 library(here)
 
-file<-here("data_processed_L2", "2025-04-01_data_grazing_L2.csv")
+file<-list.files(
+  here("data_processed_L2"),
+  pattern = "_L2\\.csv$",
+  full.names = TRUE)
+
 data_grazing <- read.csv(file, dec = ",", sep = ",")
 
 today_date <- Sys.Date()
 
 data_grazing <- data_grazing[ , -1]
+
+
+
+
+# List all L2 files
+files <- list.files(
+  here("data_processed_L2"),
+  pattern = "_L2\\.csv$",
+  full.names = TRUE
+)
+
+# Extract the dates from filenames (assuming format like "2025-04-01_data_grazing_L2.csv")
+dates <- as.Date(sub(".*(\\d{4}-\\d{2}-\\d{2}).*", "\\1", basename(files)))
+
+# Find the most recent file
+latest_file <- files[which.max(dates)]
+
+# Read it
+data_grazing <- read.csv(latest_file, dec = ",", sep = ",")
+
+
 
 
 ```
